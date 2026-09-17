@@ -1,7 +1,7 @@
 ---
 title: "Metrica Bienes Raices architecture and project layout"
 sidebarTitle: "Overview"
-description: "Explore the src/ directory structure, three-layer layout system, and how public pages, auth flows, and private role-based dashboards are organised in the codebase."
+description: "Explore the src/ directory layout, three-layer layout system, and how public pages, auth flows, and private role-based dashboards are wired together."
 ---
 
 Metrica Bienes Raices is structured as a single-page React application with a clear separation between public marketing pages, authentication flows, and gated role-based dashboards. This page documents the `src/` directory layout, explains the three distinct layout layers the app uses, and describes how routing ties everything together through `AppRouter.tsx`. Understanding this structure is the foundation for navigating the codebase, adding new features, or debugging access issues.
@@ -41,7 +41,7 @@ MetricaBienesRaices/
 │   │       ├── agent.routes.tsx   # Agente-only <Route> subtree
 │   │       ├── client.routes.tsx  # Cliente-only <Route> subtree
 │   │       └── public.routes.tsx  # Unauthenticated public page routes
-│   ├── services/                  # API call functions (axios-based, per-domain)
+│   ├── services/                  # API call functions (fetch-based, per-domain)
 │   │   └── auth/
 │   │       ├── login.service.ts
 │   │       └── logout.service.ts

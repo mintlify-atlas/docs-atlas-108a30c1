@@ -1,7 +1,7 @@
 ---
-title: "POST /iniciar-sesion — Authenticate a User"
-sidebarTitle: "POST /iniciar-sesion"
-description: "Exchange an email and password for a Bearer token that authenticates all subsequent Metrica Bienes Raices API requests."
+title: "POST /iniciar-sesion — Authenticate a User in Metrica"
+sidebarTitle: "Login"
+description: "Exchange an email and password for a signed Bearer token (auth_token_mbr) that authenticates all subsequent Metrica Bienes Raices API requests."
 ---
 
 The login endpoint validates a user's credentials and returns a signed Bearer token (`auth_token_mbr`) that must be attached to every authenticated request in the platform. No prior authentication is required to call this endpoint.
@@ -41,7 +41,7 @@ On a successful login (`200 OK`) the server returns a JSON object with the authe
 </ResponseField>
 
 <ResponseField name="role" type="string">
-  The user's role in the system. One of `admin`, `agent`, or `client`. Use this value to determine which dashboard to redirect the user to after login.
+  The user's role in the system. One of `Administrador`, `Agente`, or `Cliente`. Use this value to determine which dashboard to redirect the user to after login.
 </ResponseField>
 
 <ResponseField name="auth_token_mbr" type="string">
@@ -133,7 +133,7 @@ On a successful login (`200 OK`) the server returns a JSON object with the authe
 {
   "email": "agente@metrica.com",
   "username": "Carlos Gómez",
-  "role": "agent",
+  "role": "Agente",
   "auth_token_mbr": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "active": true
 }

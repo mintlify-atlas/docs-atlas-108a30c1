@@ -20,33 +20,40 @@ Variables are read at **build time** via `process.env.REACT_APP_*` and inlined a
 
 ### `REACT_APP_API_URL`
 
-This is the primary configuration value for the application. Every service file that communicates with the backend constructs its request URLs relative to this base, for example:
+This is the only required configuration value for the application. Every service file that communicates with the backend constructs its request URLs relative to this base. For example, `login.service.ts` and `calendar-api.config.ts` both read from `process.env.REACT_APP_API_URL`:
 
 ```typescript
-// src/services/auth/login.service.ts (illustrative)
+// src/services/auth/login.service.ts
 const BASE_URL = process.env.REACT_APP_API_URL;
 
-export const loginRequest = (credentials: LoginCredentials) =>
-  axios.post(`${BASE_URL}/auth/login`, credentials);
+export const loginRequest = async (credentials: LoginCredentials) => {
+  const response = await fetch(`${BASE_URL}/iniciar-sesion`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: credentials.email,
+      password: credentials.password,
+    }),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.message || 'Error en la solicitud');
+  }
+
+  return data;
+};
 ```
 
 Set it to the root of your REST API — include the protocol and, if applicable, a path prefix such as `/api`.
-
-### `REACT_APP_CALENDAR_API_URL` *(optional)*
-
-The calendar feature module reads its own base URL from a dedicated config file (`src/config/calendar-api.config.ts`). If your calendar functionality is served by a separate microservice or a different port, set this variable independently.
 
 ## Sample `.env` file
 
 ```bash .env
 # ─── Primary API ─────────────────────────────────────────────────────────────
-# Base URL used by all service files (auth, properties, CRM, reports, users)
+# Base URL used by all service files (auth, properties, CRM, reports, users, calendar)
 REACT_APP_API_URL=http://localhost:8000/api
-
-# ─── Calendar API ─────────────────────────────────────────────────────────────
-# Separate base URL consumed by calendar-api.config.ts
-# Remove or leave empty if your calendar endpoints live under REACT_APP_API_URL
-REACT_APP_CALENDAR_API_URL=http://localhost:8001/api
 ```
 
 <Warning>
@@ -134,6 +141,5 @@ Before running `npm start` or `npm run build`, verify:
 
 - [ ] `.env` file exists in the project root
 - [ ] `REACT_APP_API_URL` points to a reachable backend
-- [ ] `REACT_APP_CALENDAR_API_URL` is set if the calendar service runs on a separate port
 - [ ] `npm install` has been run after any `package.json` changes
 - [ ] The dev server was restarted after any `.env` changes

@@ -1,7 +1,7 @@
 ---
 title: "Calendar Events — Create, List, Update, and Delete"
 sidebarTitle: "Calendar Events"
-description: "Full CRUD for calendar events: create appointments linked to clients, leads, and properties; list, change status, update, and delete events. Bearer token required."
+description: "Full CRUD for calendar events: create, list, update, change status, and delete appointments linked to clients and properties. Bearer token required."
 ---
 
 The **Calendar Events** API powers the scheduling module within the Metrica Bienes Raices platform. Agents and administrators can create calendar appointments that are optionally associated with a client, a lead, and a specific property. Events support a color field for visual differentiation in the calendar UI, an `all_day` flag, and a lifecycle status that tracks the appointment from `"Pendiente"` through to `"Completado"`. All endpoints derive the Bearer token automatically from the Redux store via the shared `headers()` helper in `calendar-api.config.ts`.
@@ -64,7 +64,7 @@ export interface CreateCalendarEvent {
 
 ## 1. Create Calendar Event
 
-```
+```text
 POST /calendar-events
 ```
 
@@ -208,7 +208,7 @@ export const createCalendarEvent = async (
 
 ## 2. List Calendar Events
 
-```
+```text
 GET /calendar-events
 ```
 
@@ -306,7 +306,7 @@ export const getCalendarEvents = async (): Promise<CalendarEventResponse> => {
 
 ## 3. Update Calendar Event
 
-```
+```text
 PUT /calendar-events/:id
 ```
 
@@ -373,7 +373,7 @@ export const updateCalendarEvent = async (
 
 ## 4. Change Event Status
 
-```
+```text
 PATCH /event/actualizar-estado/:id
 ```
 
@@ -490,7 +490,7 @@ export const changeStatusEventService = async (
 
 ## 5. Delete Calendar Event
 
-```
+```text
 DELETE /calendar-events/:id
 ```
 

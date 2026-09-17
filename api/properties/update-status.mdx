@@ -1,18 +1,18 @@
 ---
 title: "Update or Delete a Property — Metrica Bienes Raices API"
 sidebarTitle: "Update Status"
-description: "PATCH a property's availability status between Disponible, Vendido, and No Disponible, or permanently DELETE a listing by its ID."
+description: "PATCH a property status to Disponible, Vendido, or No Disponible, or permanently DELETE a listing by ID — both require an Administrador Bearer token."
 ---
 
-This page covers two administrative property management operations: updating a listing's availability status and permanently deleting a property record. Both operations require a valid Bearer token with Administrator privileges. The status update is a partial operation (PATCH) and only modifies the `status` field, leaving all other property data intact.
+This page covers two administrative property management operations: updating a listing's availability status and permanently deleting a property record. Both operations require a valid Bearer token with Administrador privileges. The status update is a partial operation (PATCH) and only modifies the `status` field, leaving all other property data intact.
 
 ## 1. Update Property Status
 
-```
+```http
 PATCH /update/properties/:propertyId/status
 ```
 
-**Authentication:** `Authorization: Bearer <token>` — Administrator role required.
+**Authentication:** `Authorization: Bearer <token>` — Administrador role required.
 
 **Content-Type:** `application/json`
 
@@ -136,11 +136,11 @@ export async function updatePropertyStatusService(
 
 ## 2. Delete Property by ID
 
-```
+```http
 DELETE /admin/delete-property/:propertyId
 ```
 
-**Authentication:** `Authorization: Bearer <token>` — Administrator role required.
+**Authentication:** `Authorization: Bearer <token>` — Administrador role required.
 
 Permanently removes a property listing and all associated data (images, leads linked to the property) from the database. This action is **irreversible** — there is no soft-delete mechanism.
 
@@ -226,7 +226,7 @@ export const deletePropertyByIdService = async (
 | `200` | Both | Operation completed successfully. |
 | `400` | PATCH | Invalid `status` value provided. |
 | `401` | Both | Missing or expired Bearer token. |
-| `403` | Both | Insufficient permissions — Administrator role required. |
+| `403` | Both | Insufficient permissions — Administrador role required. |
 | `404` | Both | No property found for the given `propertyId`. |
 | `500` | Both | Internal server error. |
 

@@ -1,5 +1,5 @@
 ---
-title: "Admin Property Management — Metrica Bienes Raices"
+title: "Admin Property Management Guide — Metrica Bienes Raices"
 sidebarTitle: "Property Management"
 description: "Admin-only guide for creating, updating status, and deleting properties. Covers multipart/form-data upload, NewProperty fields, and status transitions."
 ---
@@ -10,7 +10,7 @@ Property management in Metrica Bienes Raices is restricted to authenticated admi
 
 The `PropiedadesView` component fetches the complete admin property list on mount using the `auth_token_mbr` from the Redux store.
 
-```
+```http
 GET ${BASE_URL}/admin-listar-propiedades
 Authorization: Bearer <auth_token_mbr>
 ```
@@ -67,7 +67,7 @@ export interface Property {
 
 New properties are created via a publish modal triggered by the **Publicar propiedad** button. The form data is submitted as `multipart/form-data` because multiple image files are uploaded alongside the property metadata.
 
-```
+```http
 POST ${BASE_URL}/crear-propiedad
 Authorization: Bearer <auth_token_mbr>
 Content-Type: multipart/form-data
@@ -160,7 +160,7 @@ export interface NewProperty {
 
 <Tabs>
   <Tab title="Endpoint">
-    ```
+    ```http
     PATCH ${BASE_URL}/update/properties/:propertyId/status
     Authorization: Bearer <auth_token_mbr>
     Content-Type: application/json
@@ -215,7 +215,7 @@ The `UpdatePropertyStatusModal` is triggered from the property card's yellow sta
 
 ## Deleting a property
 
-```
+```http
 DELETE ${BASE_URL}/admin/delete-property/:propertyId
 Authorization: Bearer <auth_token_mbr>
 ```

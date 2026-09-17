@@ -1,7 +1,7 @@
 ---
-title: "Anonymous Leads — Public Visitor CRM Flow"
+title: "Anonymous Leads — Metrica Public Visitor Lead Flow"
 sidebarTitle: "Anonymous Leads"
-description: "Learn how Metrica captures leads from unauthenticated visitors, the data shape returned, and how admins and agents review and update anonymous cases."
+description: "How Metrica captures leads from unauthenticated visitors, the data shape returned, and how admins and agents review and update anonymous cases."
 ---
 
 Anonymous leads are generated when a public visitor expresses interest in a property on the Metrica portal **without logging in**. Because no account exists, the system collects contact details—full name, email, and phone number—directly in the submission form. The resulting record is immediately routed to the assigned agent's queue and is also visible to administrators across the platform.
@@ -135,30 +135,13 @@ export interface apiResponseLeadAgent {
     };
     ```
     **Endpoint:** `GET /mostrar-leads-anonimos`  
-    Returns all anonymous leads on the platform. Requires an Administrator Bearer token.
+    Returns all anonymous leads on the platform. Requires an `Administrador` Bearer token.
   </Tab>
   <Tab title="Agent Endpoint">
-    ```typescript
-    // src/services/leads/get-lead-anonymous-agent.service.ts
-    export const getDataAnonymousLeadAgentService = async (
-      token: string
-    ): Promise<AnonymousLeadAgent[]> => {
-      const response = await fetch(
-        `${BASE_URL}/mostrar-leads-agente-anonimos`,
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization:  `Bearer ${token}`,
-          },
-        }
-      );
-      const result: apiResponseLeadAgent = await response.json();
-      return result.data;
-    };
-    ```
+    The agent-scoped anonymous leads service fetches only leads assigned to the authenticated agent. The response shape mirrors `apiResponseLeadAgent` and the endpoint returns records filtered server-side by the token holder's agent identity.
+
     **Endpoint:** `GET /mostrar-leads-agente-anonimos`  
-    Returns only the leads assigned to the authenticated agent.
+    Returns only the leads assigned to the authenticated agent. Requires an `Agente` Bearer token.
   </Tab>
 </Tabs>
 
@@ -226,10 +209,10 @@ Accepts an explicit `{ status }` body, allowing any valid status value to be set
     A public visitor fills in the lead form on a property listing page. `createLeadAnonymous` posts to `/crear-lead` without authentication. The system creates the record with status `Nuevo` and assigns it to an agent.
   </Step>
   <Step title="Agent / Admin sees new lead">
-    The lead appears in the **Solicitudes Anónimas** tab of the Admin Dashboard (`/administrador/casos/anonimos`) and in the Agent Dashboard's anonymous cases view (`/agente/casos/anonimos`). The `useCRMRequests` / `useCRMRequestsAnonymous` hooks fetch the list on mount.
+    The lead appears in the **Solicitudes Anónimas** tab of the Admin Dashboard (`/administrador/casos/anonimos`) and in the Agent Dashboard's anonymous cases view (`/agente/casos/anonimos`).
   </Step>
   <Step title="Case is opened (Visto)">
-    When the agent opens the lead card for the first time, the status advances to `Visto`. The `RequestCard` / `RequestCardAgentLead` components expose an `onStatusChange` callback that triggers the inline PATCH service.
+    When the agent opens the lead card for the first time, the status advances to `Visto`. The card components expose an `onStatusChange` callback that triggers the inline PATCH service.
   </Step>
   <Step title="Agent works the case (En Proceso)">
     Once the agent begins active follow-up (contacting the visitor, scheduling a visit), they update the status to `En Proceso`. This is visible in the "En Proceso" tab across both dashboards.

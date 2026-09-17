@@ -1,7 +1,7 @@
 ---
-title: "Agent Case Transfer — Reassign Anonymous Cases"
+title: "Agent Case Transfer — Reassigning CRM Anonymous Cases"
 sidebarTitle: "Case Transfer"
-description: "Learn how administrators use the case transfer feature to look up an anonymous lead by code and reassign it from one agent to another in Metrica."
+description: "How administrators use the case transfer feature to look up an anonymous lead by code and reassign it from one agent to another in Metrica."
 ---
 
 The **Case Transfer** feature gives Administrators the ability to re-route any anonymous case from its currently assigned agent to a different one. This is useful when an agent's workload needs to be rebalanced, when an agent is unavailable, or when a case is better suited to another agent's speciality or region.
@@ -15,7 +15,7 @@ The transfer flow consists of two sequential API calls:
 1. **Look up the case** — `POST /admin/buscar-caso-codigo` accepts a `code` string and returns the current lead details plus a list of available agents.
 2. **Confirm the transfer** — `POST /caso/cambiar-agente` accepts the case `code` and the selected `user_id` (the new agent) to perform the reassignment.
 
-Both endpoints require a valid Administrator Bearer token.
+Both endpoints require a valid `Administrador` Bearer token.
 
 ## API Reference
 
@@ -48,15 +48,17 @@ export const showCaseByCodeService = async (
   The unique case code printed on the anonymous lead record (e.g. `CASO-20240501-001`).
 </ParamField>
 
-**Response shape** (`ShowCaseResponse`):
+**Response shape** (`ShowCaseResponse`) from `src/types/leads/post-show-case-code.interface.ts`:
 
 ```typescript
-{
+export interface ShowCaseResponse {
   success: boolean;
+  message: string;
   data: {
     lead: {
       code:      string;  // Case code
-      full_name: string;  // Current lead contact name (used as "Agente Actual" label)
+      username:  string;  // Username of the currently assigned agent
+      full_name: string;  // Full name of the currently assigned agent
     };
     agents_available: Array<{
       id:        number;
@@ -69,8 +71,11 @@ export const showCaseByCodeService = async (
 <ResponseField name="data.lead.code" type="string">
   The canonical code for this lead, echoed back from the backend.
 </ResponseField>
+<ResponseField name="data.lead.username" type="string">
+  Username of the agent currently assigned to the case.
+</ResponseField>
 <ResponseField name="data.lead.full_name" type="string">
-  Display name of the current agent (or contact) assigned to the case, shown in the UI as *Agente Actual*.
+  Display name of the current agent assigned to the case, shown in the UI as *Agente Actual*.
 </ResponseField>
 <ResponseField name="data.agents_available" type="array">
   List of agents who are available to receive the case transfer. Each entry contains `id` and `full_name`.
@@ -109,7 +114,7 @@ export const changeAgentCaseService = async (
   The `id` of the new agent selected from `agents_available`.
 </ParamField>
 
-On success the API returns `{ success: true }` and `ServiceAlert.success` is triggered with the message **"Agente Cambiado Exitosamente"**.
+On success the API returns `{ success: true }` and a success alert is triggered with the message **"Agente Cambiado Exitosamente"**.
 
 ## Transfer Workflow
 
@@ -118,10 +123,10 @@ On success the API returns `{ success: true }` and `ServiceAlert.success` is tri
     From the Administrator Dashboard sidebar, expand **Transferencia** and click **Transferir Caso Anonimo**. This loads the `TransferAgentCase` component at route `/administrador/transferencia/tranferir-caso`.
   </Step>
   <Step title="Enter the case code">
-    Type the unique case `code` into the search input field. The code is visible on each `RequestCard` in the anonymous leads views. Press **Buscar** or click the search button to trigger `showCaseByCodeService`.
+    Type the unique case `code` into the search input field. The code is visible on each lead card in the anonymous leads views. Press **Buscar** or click the search button to trigger `showCaseByCodeService`.
   </Step>
   <Step title="Review current assignment">
-    If the lookup succeeds (`response.success === true`), the UI reveals a details panel showing the **Código del Caso** and the **Agente Actual** (current agent's name). The component sets `casoEncontrado = true`.
+    If the lookup succeeds (`response.success === true`), the UI reveals a details panel showing the **Código del Caso** and the **Agente Actual** (current agent's name from `data.lead.full_name`). The component sets `casoEncontrado = true`.
   </Step>
   <Step title="Select a new agent">
     A `<select>` dropdown is populated with `agents_available` returned by the API. Choose the agent you want to reassign the case to. The selected value is stored as `nuevoAgente` (agent `id` as a string).
@@ -143,7 +148,7 @@ The `TransferAgentCase` view (`src/auth/dashboards/admin-dashboard/lead-transfer
 | `agentes` | `Array<{ id, full_name }>` | Available agents populated from the API response |
 | `nuevoAgente` | `string` | The `id` (as string) of the selected target agent |
 | `loading` | `boolean` | Shows a spinner during the lookup request |
-| `loadingTransfer` | `boolean` | Disables the transfer button and shows "Transfiriendo..." during the PATCH |
+| `loadingTransfer` | `boolean` | Disables the transfer button and shows "Transfiriendo..." during the transfer |
 
 ## Route & Access Control
 

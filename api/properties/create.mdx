@@ -1,18 +1,18 @@
 ---
-title: "Create a New Property — Metrica Bienes Raices API"
+title: "Create a New Property Listing — Metrica Bienes Raices"
 sidebarTitle: "Create Property"
-description: "Submit a multipart/form-data request to publish a new real estate listing, including title, specs, pricing, address, and up to N image files."
+description: "Submit a multipart/form-data POST to /crear-propiedad to publish a new real estate listing with title, specs, pricing, address, and image files."
 ---
 
 The **Create Property** endpoint allows administrators to publish a new real estate listing on the Metrica Bienes Raices platform. The request must be sent as `multipart/form-data` because it accepts image file uploads alongside structured listing data. All text fields are appended to the `FormData` object individually, and images are appended using indexed keys (`images[0]`, `images[1]`, etc.). The `Content-Type` header must **not** be set manually — the browser or `fetch` API sets it automatically with the correct `boundary` when a `FormData` body is used.
 
 ## Endpoint
 
-```
+```http
 POST /crear-propiedad
 ```
 
-**Authentication:** `Authorization: Bearer <token>` — Administrator role required.
+**Authentication:** `Authorization: Bearer <token>` — Administrador role required.
 
 **Content-Type:** `multipart/form-data` (set automatically by the browser/fetch with boundary).
 
@@ -224,7 +224,7 @@ export interface NewProperty {
 |-------------|---------|
 | `201` / `200` | Property created successfully. |
 | `401` | Missing or invalid Bearer token. |
-| `403` | Authenticated user does not have Administrator role. |
+| `403` | Authenticated user does not have Administrador role. |
 | `422` | Validation error — one or more required fields are missing or malformed. |
 | `500` | Internal server error. |
 

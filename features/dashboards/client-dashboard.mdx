@@ -1,7 +1,7 @@
 ---
-title: "Client Dashboard — Properties, Requests & Profile"
+title: "Client Dashboard — Properties, Requests & Profile Settings"
 sidebarTitle: "Client Dashboard"
-description: "Guide to the Metrica Client Dashboard: browsing available properties, submitting CRM lead requests linked to agents and properties, and managing a profile."
+description: "The Metrica Client Dashboard: browsing available properties, submitting CRM lead requests linked to agents and properties, and managing a client profile."
 ---
 
 The **Client Dashboard** is the authenticated portal for property seekers using the Metrica Bienes Raices platform. Once a visitor creates an account and logs in, they gain access to a personalised workspace where they can browse available listings, submit interest requests directly to agents, track the progress of their cases, and manage their profile settings.
@@ -21,49 +21,39 @@ The Configuración entry has `divider: true`, rendering a visual separator above
 
 ## Dashboard Summary Panel
 
-The `ClientDashboard` component (`client-dashboard.page.tsx`) renders four personal KPI cards:
+The `ClientDashboard` component (`client-dashboard.page.tsx`) renders four stat cards at the top of the summary panel. These cards currently display static placeholder values pending live data integration:
 
 <CardGroup cols={2}>
   <Card title="Favoritos" icon="heart">
-    Count of properties the client has saved to their favourites list, with a weekly delta.
+    Displays a static count of saved properties with a weekly delta label. Placeholder until live favourites data is integrated.
   </Card>
   <Card title="Búsquedas Guardadas" icon="map-pin">
-    Saved property search filters with a badge showing new matching properties.
+    Displays a static count of saved search filters with a new-matches badge. Placeholder until live search data is integrated.
   </Card>
   <Card title="Presupuesto Estimado" icon="dollar-sign">
-    The client's estimated budget, used to surface relevant property recommendations.
+    Displays a static estimated budget value. Placeholder until client budget data is integrated.
   </Card>
   <Card title="Alertas Activas" icon="bell">
-    Active property match alerts, indicating how many new properties match the client's criteria.
+    Displays a static count of active property match alerts. Placeholder until live alerts data is integrated.
   </Card>
 </CardGroup>
 
-Below the KPIs the panel renders:
+Below the KPI cards the panel renders:
 
-- **Propiedades Favoritas** — a 3-column card grid of saved properties showing title, location, price, star rating, and a *Ver detalles* button.
-- **Actividad Reciente** — a timeline of the client's most recent actions (property viewed, property saved, agent contact).
-- **Recomendaciones Personalizadas** — algorithmically surfaced suggestions based on saved searches and browsing history.
+- **Propiedades Favoritas** — a static 3-column card grid of example saved properties showing title, location, price, rating, and a *Ver detalles* button.
+- **Actividad Reciente** — a static timeline of three example recent actions (property viewed, property saved, agent contact).
+- **Recomendaciones Personalizadas** — two static recommendation cards suggesting nearby properties and market value trends.
 
 ## Available Properties View
 
 **Route:** `/cliente/propiedad`  
 **Component:** `AvailablePropertiesClient` (`available-properties.view.tsx`)
 
-This view renders all publicly listed properties the client can browse and enquire about. Data is fetched on mount via `getProperties()` (no auth token required — public endpoint):
-
-```typescript
-useEffect(() => {
-  const fetchData = async () => {
-    const res = await getProperties();
-    setProperties(res.data || []);
-  };
-  fetchData();
-}, []);
-```
+This view renders all publicly listed properties the client can browse and enquire about. Data is fetched on mount via a properties service call. Properties shown have status `Disponible`.
 
 ### Filters
 
-The view provides three filter controls rendered in a sticky filter bar:
+The view provides three filter controls:
 
 <ParamField query="searchTerm" type="string">
   Free-text search matched against property `title` and `location` fields (case-insensitive).
@@ -75,7 +65,7 @@ The view provides three filter controls rendered in a sticky filter bar:
   Dropdown populated dynamically from unique `location` values. Selecting "Todos" clears the filter.
 </ParamField>
 
-The **clear filters** button (`X`) resets all three filters to empty. The filtered result set is sliced to the first 6 properties (`featured`), rendering them as `PropertyCardClient` components in a responsive 3-column grid. A skeleton loader (`PropertySkeleton`) is shown for each card during the fetch.
+The filtered result set is rendered as `PropertyCardClient` components in a responsive 3-column grid. A skeleton loader (`PropertySkeleton`) is shown for each card during the fetch.
 
 ## CRM Requests View
 
@@ -87,8 +77,8 @@ This view lets clients track all CRM lead requests they have submitted. Each req
 - A unique **ID** (e.g. `CRM-001`)
 - **Client name** and **email**
 - **Property type** interested in
-- **Priority** badge (Alta / Media / Baja) with a trend icon
-- **Status** badge (Pendiente / En Proceso / Completado / Cancelado)
+- **Priority** badge with a trend icon
+- **Status** badge
 - **Assigned agent** name
 - **Creation date** formatted in `es-CO` locale
 - **Action buttons**: View details, Edit, Delete
@@ -97,20 +87,20 @@ The table supports client-side sort on any column and filters by status, priorit
 
 ### Status Values
 
-| Status Key | Spanish Label | Badge Colour |
-|---|---|---|
-| `pending` | Pendiente | Amber |
-| `in_progress` | En Proceso | Blue |
-| `completed` | Completado | Green |
-| `cancelled` | Cancelado | Red |
+| Status Key | Display Label |
+|---|---|
+| `pending` | Pendiente |
+| `in_progress` | En Proceso |
+| `completed` | Completado |
+| `cancelled` | Cancelado |
 
 ### Priority Values
 
-| Priority Key | Spanish Label | Badge Colour |
-|---|---|---|
-| `high` | Alta | Red |
-| `medium` | Media | Amber |
-| `low` | Baja | Green |
+| Priority Key | Display Label |
+|---|---|
+| `high` | Alta |
+| `medium` | Media |
+| `low` | Baja |
 
 ## Submitting a CRM Lead Request
 
@@ -158,7 +148,16 @@ export const createLead = async (
 };
 ```
 
-On success the `CreateLeadResponse` includes the new lead's `id`, `code`, `agent_id`, `property_id`, `full_name`, `interest`, `status` (`Nuevo`), and `priority`.
+On success the `CreateLeadResponse` (from `src/types/leads/leads.interface.ts`) returns `success`, `message`, and an optional `data` field:
+
+```typescript
+export interface CreateLeadResponse {
+  success: boolean;
+  message: string;
+  data?:   any;
+  errors?: any;
+}
+```
 
 <Steps>
   <Step title="Browse available properties">
@@ -187,8 +186,8 @@ Clients have a read-only, self-scoped view of the platform:
 
 - They can see **all available properties** (public endpoint, no auth required for listing).
 - They can create leads **linked to themselves**, but cannot view other clients' requests.
-- They **cannot** access any `/administrador/*` or `/agente/*` routes; attempting to do so is blocked by the role guard.
+- They **cannot** access any `/administrador/*` or `/agente/*` routes; attempting to do so is blocked by the role guard (`allowedRoles={["Cliente"]}`).
 
 <Tip>
-  The client role is the only role that does not require a Bearer token to load the properties listing. The `getProperties()` service is a public fetch, meaning the property catalogue can also be browsed before logging in — but submitting a lead request always requires authentication.
+  The client role is the only role that does not require a Bearer token to load the properties listing. The properties catalogue can be browsed before logging in — but submitting a lead request always requires authentication.
 </Tip>

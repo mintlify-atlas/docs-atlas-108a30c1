@@ -1,7 +1,7 @@
 ---
-title: "Leads Overview — Metrica Bienes Raices CRM"
+title: "CRM Leads Overview — Metrica Bienes Raices Platform"
 sidebarTitle: "Leads Overview"
-description: "Understand how Metrica's CRM tracks anonymous and registered leads, lead statuses, service call patterns, and the CreateLeadPayload interface."
+description: "How Metrica CRM tracks anonymous and registered leads, lead statuses, service call patterns, and the CreateLeadPayload interface definition."
 ---
 
 Metrica Bienes Raices organises all inbound interest around a unified **lead** concept. A lead ties a prospective buyer or tenant to a specific property, an assigned agent, and an optional registered client account. Two distinct creation paths exist—one for unauthenticated visitors browsing the public portal, and one for clients who are already logged in—but every lead ultimately flows through the same CRM pipeline where agents review, progress, and resolve cases.
@@ -45,6 +45,8 @@ export interface CreateLeadPayload {
 
 ### CreateLeadResponse
 
+The `CreateLeadResponse` type is defined in `src/types/leads/leads.interface.ts`:
+
 ```typescript
 export interface CreateLeadResponse {
   success: boolean;
@@ -66,14 +68,14 @@ Anonymous leads are submitted via `POST /crear-lead` using the `FormDataLead` ty
 
 Every lead in the system moves through a defined set of status values tracked in the CRM views:
 
-| Status | Spanish Label | Description |
-|---|---|---|
-| `Nuevo` | Nuevo | Freshly submitted; not yet reviewed |
-| `Visto` | Visto | Opened and viewed by the assigned agent |
-| `En Proceso` | En Proceso | Actively being handled |
-| `Resuelto` | Resuelto | Case closed / resolved |
+| Status | Description |
+|---|---|
+| `Nuevo` | Freshly submitted; not yet reviewed |
+| `Visto` | Opened and viewed by the assigned agent |
+| `En Proceso` | Actively being handled |
+| `Resuelto` | Case closed / resolved |
 
-The `updateStatusAnonymousLead` service handles status transitions via `PATCH /change-status-anonymous-leads-view-details/:id`. Status filters map directly to the `RequestTabType` tabs (`todos`, `nuevos`, `en_proceso`, `resueltos`, `visto`) rendered in the CRM request views.
+The `updateStatusAnonymousLead` service handles status transitions via `PATCH /change-status-anonymous-leads-view-details/:id`. Status filters map directly to the tab keys (`todos`, `nuevos`, `en_proceso`, `resueltos`, `visto`) rendered in the CRM request views.
 
 ## Service Call Reference
 

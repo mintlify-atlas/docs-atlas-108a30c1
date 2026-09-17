@@ -1,7 +1,7 @@
 ---
 title: "User roles and access control in Metrica Bienes Raices"
 sidebarTitle: "Roles & Permissions"
-description: "Deep-dive into the Administrador, Agente, and Cliente roles, how PrivateRoute enforces access, and the full route matrix for each role in Metrica Bienes Raices."
+description: "Covers the Administrador, Agente, and Cliente roles, how PrivateRoute enforces access, and the full route matrix for every role in Metrica Bienes Raices."
 ---
 
 Metrica Bienes Raices implements role-based access control (RBAC) across every private route in the application. There are three roles — `Administrador`, `Agente`, and `Cliente` — defined as a TypeScript union type and enforced at the React Router level by the `PrivateRoute` component, which reads the authenticated user's role from the Redux `auth` slice. This page explains the role type, the route-protection mechanism, and the complete list of pages available to each role.

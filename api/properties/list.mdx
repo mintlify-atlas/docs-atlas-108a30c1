@@ -1,14 +1,14 @@
 ---
-title: "List All Properties — Metrica Bienes Raices API"
+title: "List All Properties — Metrica Bienes Raices Public API"
 sidebarTitle: "List Properties"
-description: "Fetch the full public catalog of properties. Returns an array of PropertyGetData objects with pricing, specs, and a primary image URL."
+description: "Fetch the full public property catalog from Metrica Bienes Raices. Returns PropertyGetData objects with pricing, specs, address, and a primary image URL."
 ---
 
 The **List Properties** endpoint exposes the complete public property catalog without requiring any form of authentication. Use it to populate listing pages, property grids, and search results on the client-facing side of the application. Each item in the returned `data` array contains the essential display fields defined in the `PropertyGetData` interface, including a pre-resolved `full_address` and the URL for the property's primary image.
 
 ## Endpoint
 
-```
+```http
 GET /todas-propiedades
 ```
 
@@ -144,44 +144,16 @@ export const getProperties = async (): Promise<PropertyResponse> => {
 }
 ```
 
-## Get a Single Property by ID
-
-To retrieve the full detail of one public property use the `/propiedad/:id` endpoint.
-
-```
-GET /propiedad/:id
-```
-
-```bash
-curl --request GET \
-  --url "${REACT_APP_API_URL}/propiedad/14" \
-  --header "Accept: application/json"
-```
-
-```typescript
-export async function getPropertyById(id: string): Promise<PropertyResponse> {
-  const response = await fetch(`${BASE_URL}/propiedad/${id}`);
-
-  const data: PropertyResponse = await response.json();
-
-  if (!response.ok) {
-    throw new Error(data.message || "Error obteniendo propiedad");
-  }
-
-  return data;
-}
-```
-
 ## Admin — List All Properties (Full Data)
 
-Administrators can retrieve the full dataset for all properties, including status, audit timestamps, and related user data.
+Administradores can retrieve the full dataset for all properties, including status, audit timestamps, and related user data.
 
-```
+```http
 GET /admin-listar-propiedades
 ```
 
 <Note>
-  This endpoint requires a valid Bearer token with **Administrator** role. The response envelope's `data` array contains `Property` objects with extended fields such as `status`, `image` (as `PropertyImage | null`), and audit metadata.
+  This endpoint requires a valid Bearer token with **Administrador** role. The response envelope's `data` array contains `Property` objects with extended fields such as `status`, `image` (as `PropertyImage | null`), and audit metadata.
 </Note>
 
 ```bash
@@ -190,21 +162,6 @@ curl --request GET \
   --header "Authorization: Bearer <token>" \
   --header "Content-Type: application/json"
 ```
-
-### Admin — Get Property by ID
-
-```
-GET /admin-listar-propiedad/:id
-```
-
-```bash
-curl --request GET \
-  --url "${REACT_APP_API_URL}/admin-listar-propiedad/14" \
-  --header "Authorization: Bearer <token>" \
-  --header "Content-Type: application/json"
-```
-
-The response `data` object conforms to `PropertyDetailId` which extends `AdminPropertyDetails` with description, images array, user reference, and full audit timestamps.
 
 ## Error Handling
 

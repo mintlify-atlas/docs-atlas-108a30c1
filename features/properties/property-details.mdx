@@ -1,5 +1,5 @@
 ---
-title: "Property Detail View — Metrica Bienes Raices"
+title: "Property Detail View and PDF Export — Metrica Bienes Raices"
 sidebarTitle: "Property Details"
 description: "Full property detail view for clients and admins: image gallery, key metrics, description, nearby places, currency converter, and PDF export."
 ---
@@ -110,7 +110,7 @@ export interface PropertyDetailResponse {
 
 <Tabs>
   <Tab title="Public (client)">
-    ```
+    ```http
     GET ${BASE_URL}/propiedad/:id
     ```
 
@@ -127,7 +127,7 @@ export interface PropertyDetailResponse {
     ```
   </Tab>
   <Tab title="Admin">
-    ```
+    ```http
     GET ${BASE_URL}/admin-listar-propiedad/:id
     Authorization: Bearer <auth_token_mbr>
     ```

@@ -1,5 +1,5 @@
 ---
-title: "Redux state management and persistence in Metrica Bienes Raices"
+title: "Redux Toolkit state management in Metrica Bienes Raices"
 sidebarTitle: "State Management"
 description: "Learn how Redux Toolkit, redux-persist, and the auth slice power Metrica Bienes Raices authentication state, token storage, and typed dispatch hooks."
 ---
@@ -114,7 +114,7 @@ export const loginUser = createAsyncThunk<AuthPayload, LoginCredentials>(
 )
 ```
 
-The thunk calls `loginRequest` (a thin axios wrapper that posts to `REACT_APP_API_URL/auth/login`), validates that the returned account is active, and returns the normalised payload. The auth slice's `extraReducers` handle the three lifecycle cases:
+The thunk calls `loginRequest` (a `fetch`-based function that posts to `${REACT_APP_API_URL}/iniciar-sesion`), validates that the returned account is active, and returns the normalised payload. The auth slice's `extraReducers` handle the three lifecycle cases:
 
 - **`pending`** → sets `loading: true`, clears `error`
 - **`fulfilled`** → writes all user fields, sets `isAuthenticated: true`, clears `loading`
@@ -132,7 +132,7 @@ export const logoutUser = createAsyncThunk(
 
       if (!token) throw new Error('No hay token disponible')
 
-      await logoutRequest(token)  // Calls the server-side logout endpoint
+      await logoutRequest(token)  // POST ${REACT_APP_API_URL}/cerrar-sesion
       return true
     } catch (error: any) {
       return rejectWithValue(error.message)
@@ -152,22 +152,29 @@ export const logoutUser = createAsyncThunk(
 After a successful login, `auth_token_mbr` is stored in both the Redux state and `localStorage` (via redux-persist). Service functions retrieve it and attach it as an `Authorization: Bearer` header:
 
 ```typescript
-// Example usage in a protected service (e.g. properties.service.ts)
-import { store } from '../../store'
+// Example usage in a protected service (e.g. get-admin-properties.service.ts)
+const BASE_URL = process.env.REACT_APP_API_URL
 
-export const getProperties = () => {
-  const token = store.getState().auth.auth_token_mbr
-
-  return axios.get(`${process.env.REACT_APP_API_URL}/properties`, {
+export const getPropertiesFullDataAdmin = async (token: string) => {
+  const response = await fetch(`${BASE_URL}/admin-listar-propiedades`, {
+    method: 'GET',
     headers: {
+      'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
   })
+
+  if (!response.ok) {
+    throw new Error('Error obteniendo propiedades')
+  }
+
+  const data = await response.json()
+  return data.data || []
 }
 ```
 
 <Tip>
-  A common pattern in the codebase is to create an axios instance with an interceptor that automatically reads the token from the store and attaches the `Authorization` header to every outgoing request. This avoids repeating the header setup in every service function.
+  The codebase passes the `auth_token_mbr` token directly as a parameter to each service function, which then sets the `Authorization: Bearer` header on the outgoing `fetch` request. This keeps each service self-contained and avoids hidden global side-effects.
 </Tip>
 
 ## Typed hooks

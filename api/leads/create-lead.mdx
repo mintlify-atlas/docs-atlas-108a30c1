@@ -1,14 +1,14 @@
 ---
-title: "Create a Client Lead — Metrica Bienes Raices API"
+title: "Create a Lead — Metrica Bienes Raices Client Lead API"
 sidebarTitle: "Create Lead"
-description: "Submit a new lead from an authenticated client, assigning it to an agent and a property. Also covers the PATCH endpoint to update lead status."
+description: "Submit a new lead from an authenticated client, linking an agent and property. Also covers the PATCH endpoint to update an existing lead status."
 ---
 
 The **Create Lead** endpoint allows an authenticated client to submit a new lead request on the Metrica Bienes Raices platform. A lead links a client to a specific property and assigns an agent responsible for following up. The payload must include the target agent, the property of interest, the type of inquiry, and an optional note. Authentication via Bearer token is required, and the token must correspond to a user with the **Client** role.
 
 ## Endpoint
 
-```
+```text
 POST /client-crear-lead
 ```
 
@@ -71,6 +71,8 @@ export interface CreateLeadResponse {
 ```
 
 ## Examples
+
+The examples below show how to call the `POST /client-crear-lead` endpoint from the command line and from TypeScript.
 
 ### cURL
 
@@ -152,7 +154,7 @@ export const createLead = async (
 
 ## Update Lead Status
 
-```
+```text
 PATCH /change-status-anonymous-leads-view-details/:id
 ```
 

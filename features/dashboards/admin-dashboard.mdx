@@ -1,7 +1,7 @@
 ---
-title: "Admin Dashboard — Platform Overview & Management"
+title: "Admin Dashboard — Metrica Platform Overview & KPIs"
 sidebarTitle: "Admin Dashboard"
-description: "Explore the Metrica Administrator Dashboard: platform KPIs, user management, property oversight, CRM case views, case transfers, and navigation structure."
+description: "The Metrica Administrator Dashboard: platform KPIs, user management, property oversight, CRM case views, case transfers, and navigation structure."
 ---
 
 The **Administrator Dashboard** is the central nerve centre of the Metrica Bienes Raices platform. It is accessible only to users whose role is `Administrador` (enforced by `allowedRoles={["Administrador"]}` on the route guard) and exposes a comprehensive view of every entity in the system—users, properties, leads, agents, and aggregate statistics.
@@ -10,7 +10,7 @@ The dashboard opens at `/panel` (shared entry point) and then routes into the `/
 
 ## Platform KPIs
 
-The header card row surfaces six live counters from `DashboardInformationData`:
+The header card row surfaces five live counters sourced from `DashboardInformationData` via `GET /dashboard-information`:
 
 <CardGroup cols={3}>
   <Card title="Total Users" icon="users">
@@ -26,10 +26,7 @@ The header card row surfaces six live counters from `DashboardInformationData`:
     `not_available_properties` — properties marked `No Disponible`.
   </Card>
   <Card title="Sold Properties" icon="tag">
-    `sold_properties` — properties with status `Vendida`.
-  </Card>
-  <Card title="User Breakdown" icon="chart-pie">
-    `total_administrators`, `total_agents`, `total_clients` — displayed in the Distribución de Usuarios pie chart.
+    `sold_properties` — properties with status `Vendido`.
   </Card>
 </CardGroup>
 
@@ -81,7 +78,7 @@ The `navigationConfig` restricts all `/administrador/*` items to the `Administra
 | Solicitudes (CRM) | `/administrador/casos/crm` | Users | Registered client leads |
 | Solicitudes Agente | `/administrador/casos/agentes-casos` | FileUser | Leads grouped by agent |
 | Transferir Caso | `/administrador/transferencia/tranferir-caso` | MoveHorizontal | Case reassignment tool |
-| Reportes | `/administrador/reportes` | BarChart3 | Reports (in development) |
+| Reportes | `/administrador/reportes` | BarChart3 | Reports section |
 | Calendario General | `/administrador/calendario/calendario-general` | CalendarRange | General calendar |
 | Calendario Agentes | `/administrador/calendario/calendario-agentes` | CalendarSync | Agent-specific calendar |
 | Configuración | `/administrador/configuracion` | Settings | Platform settings |
@@ -92,24 +89,28 @@ The `navigationConfig` restricts all `/administrador/*` items to the `Administra
 
 ## Dashboard Summary Tab
 
-The main "Resumen General" tab (`activeTab === 0`) renders four panels:
+The main "Resumen General" tab (`activeTab === 0`) renders four panels alongside the live KPI header cards:
 
 <CardGroup cols={2}>
   <Card title="Quick Metrics" icon="chart-bar">
-    Four KPI cards: Tasa de Ocupación, Visitas Programadas, Tiempo Promedio Venta, and Leads Nuevos—each with a trend indicator.
+    Four static display cards: Tasa de Ocupación, Visitas Programadas, Tiempo Promedio Venta, and Leads Nuevos — with trend indicators. These are static placeholder values; the panel displays a notice that some sections are still in development.
   </Card>
   <Card title="Recent Activity" icon="activity">
-    A live feed of the last five platform events (property published, client registered, sale closed, visit scheduled).
+    A static feed of the last five example platform events (property published, client registered, status updated, sale closed, visit scheduled). This data is hardcoded in the component pending live integration.
   </Card>
   <Card title="User Distribution" icon="chart-pie">
-    A Recharts `PieChart` showing the split between Administradores, Agentes, and Clientes using `total_*` values from the API.
+    A Recharts `PieChart` showing the split between Administradores, Agentes, and Clientes. Values are sourced live from `total_administrators`, `total_agents`, and `total_clients` returned by `GET /dashboard-information`.
   </Card>
   <Card title="Top Agents" icon="trophy">
-    A ranked list of top-performing agents with a `LinearProgress` bar representing their sales count relative to the highest performer.
+    A ranked list of top-performing agents with a `LinearProgress` bar. This is static placeholder data hardcoded in the component pending live integration.
   </Card>
 </CardGroup>
 
-A bar chart at the bottom of the tab displays **Propiedades por Tipo** (Casas, Apartamentos, Oficinas, Terrenos, Locales).
+A bar chart at the bottom of the tab displays **Propiedades por Tipo** (Casas, Apartamentos, Oficinas, Terrenos, Locales) using static placeholder counts hardcoded in the component.
+
+<Note>
+  On load, the dashboard displays a `ServiceAlert.info` notification: *"El panel aun esta en desarrollo, algunas funcionalidades ya son dinamicas"*. The live dynamic data is confirmed for the five KPI header cards and the user distribution pie chart only. All other widgets in the Resumen General tab use static placeholder data.
+</Note>
 
 ## Users Section
 
@@ -126,9 +127,9 @@ The **Usuarios** view (`/administrador/usuarios`) renders `UserView`, which prov
 The **Propiedades** view (`/administrador/propiedades`) renders `PropiedadesView`, which:
 
 - Fetches all property data via `getPropertiesFullDataAdmin(token)` on mount.
-- Displays properties in a responsive 3-column card grid.
-- Each card shows status badge (`Disponible` / `No Disponible` / `Vendida`), category badge, image, key attributes (bedrooms, bathrooms, built area, land area), and price.
-- Three action buttons per card: **View Details** (links to `/administrador/detalles-propiedad/:id`), **Delete** (`DeletePropertyById` modal), and **Update Status** (`UpdatePropertyStatusModal`).
+- Displays properties in a responsive card grid.
+- Each card shows a status badge (`Disponible` / `No Disponible` / `Vendido`), category badge, image, key attributes (bedrooms, bathrooms, built area, land area), and price.
+- Three action buttons per card: **View Details**, **Delete** (`DeletePropertyById` modal), and **Update Status** (`UpdatePropertyStatusModal`).
 - **Publicar propiedad** button opens `PublishModal` for creating new listings.
 
 ## CRM Cases Sections
@@ -168,18 +169,15 @@ Allows administrators to reassign any anonymous case from one agent to another. 
 
 ## Role Guard
 
-The Administrator Dashboard is protected at the router level. Only authenticated sessions with `role === "Administrador"` can access any `/administrador/*` route. The `navigationConfig` items for this role are:
+The Administrator Dashboard is protected at the router level. Only authenticated sessions with `role === "Administrador"` can access any `/administrador/*` route. The `navigationConfig` items for this role carry `roles: ['Administrador']`, and the sidebar navigation renderer filters items against the authenticated user's role at runtime.
 
 ```typescript
-{
-  label: "Usuarios",
-  path:  "/administrador/usuarios",
-  roles: ["Administrador"],
-}
+// src/routes/modules/admin.routes.tsx
+<PrivateRoute allowedRoles={["Administrador"]}>
+  <MainLayout />
+</PrivateRoute>
 ```
 
-All entries carry `roles: ['Administrador']`, and the sidebar navigation renderer filters items against the authenticated user's role at runtime.
-
 <Warning>
-  The dashboard panel notes that some sections are still in active development. The `/administrador/reportes` and calendar routes display placeholder content. Live data is confirmed dynamic for all KPI cards, the user distribution chart, the Users table, Properties grid, and all CRM case views.
+  The `/administrador/reportes` and calendar routes display placeholder content. Live data is confirmed dynamic for the five KPI header cards and the user distribution chart only. The Users table, Properties grid, and all CRM case views load live data from their respective API endpoints.
 </Warning>

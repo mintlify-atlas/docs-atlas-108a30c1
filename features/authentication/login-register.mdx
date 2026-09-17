@@ -10,7 +10,7 @@ Metrica Bienes Raices uses a JWT-based authentication system. On a successful lo
 
 ### Endpoint
 
-```
+```http
 POST ${BASE_URL}/iniciar-sesion
 Content-Type: application/json
 ```
@@ -90,7 +90,7 @@ export interface LoginCredentials {
     interface AuthState {
       email: string | null;
       username: string | null;
-      role: string | null;          // 'admin' | 'client' | 'agent'
+      role: string | null;           // 'Administrador' | 'Agente' | 'Cliente'
       auth_token_mbr: string | null; // JWT Bearer token
       active: boolean;
       isAuthenticated: boolean;
@@ -185,15 +185,44 @@ The `Register` component validates the form client-side before calling the API. 
     `validateForm()` runs synchronously on submit. If any rule fails, a `ServiceAlert.error` toast is shown and the request is not sent.
   </Step>
 
-  <Step title="POST to registration endpoint">
-    `registerUserClient` sends the `RegisterData` payload to the registration API endpoint.
+  <Step title="POST to /create-user-client">
+    `registerUserClient` sends the payload to the registration endpoint.
 
     ```typescript
-    await registerUserClient({
-      email: formData.email,
-      username: formData.username,
-      password: formData.password,
-    });
+    // src/services/users/create-client-user.service.ts
+    export const registerUserClient = async (
+      payload: RegisterPayload
+    ): Promise<RegisterResponse> => {
+      const response = await fetch(`${BASE_URL}/create-user-client`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw data;
+      return data;
+    };
+    ```
+
+    The `RegisterPayload` type (`src/types/users/create-client-user.interface.ts`) matches `RegisterData` field-for-field:
+
+    ```typescript
+    export interface RegisterPayload {
+      email: string;
+      username: string;
+      password: string;
+    }
+
+    export interface RegisterResponse {
+      success: boolean;
+      message: string;
+      data?: any;
+      errors?: any;
+    }
     ```
   </Step>
 

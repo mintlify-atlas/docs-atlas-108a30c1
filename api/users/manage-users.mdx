@@ -1,7 +1,7 @@
 ---
-title: "Manage Users — Metrica Bienes Raices Admin API"
+title: "Platform User Management API — Metrica Bienes Raices"
 sidebarTitle: "Manage Users"
-description: "List, create, delete, toggle status, view details, and update profiles for platform users. All endpoints require a valid Bearer token."
+description: "List, create, delete, toggle activation status, and update profiles for Metrica Bienes Raices users. Bearer token required for all operations."
 ---
 
 The **Manage Users** set of endpoints gives administrators and authenticated users full control over user accounts on the Metrica Bienes Raices platform. Administrators can list all users, create new accounts, delete accounts, and toggle activation status. Any authenticated user can view their own details and update their own profile. All operations require a valid Bearer token obtained during the authentication flow.
@@ -59,7 +59,7 @@ export interface ApiUser {
 
 ## 1. List All Users
 
-```
+```text
 GET /full-users
 ```
 
@@ -129,7 +129,7 @@ export const getFullUsers = async (
 
 ## 2. Get User Details
 
-```
+```text
 GET /details-user/:id
 ```
 
@@ -173,7 +173,7 @@ export const getUserDetails = async (id: number, auth_token_mbr: string) => {
 
 ## 3. Create User
 
-```
+```text
 POST /nuevo-usuario
 ```
 
@@ -300,7 +300,7 @@ export async function createUserService(
 
 ## 4. Delete User
 
-```
+```text
 DELETE /eliminar-usuario/:id
 ```
 
@@ -367,7 +367,7 @@ export const deleteUserRequest = async (
 
 ## 5. Update User Status (Toggle Active/Inactive)
 
-```
+```text
 PATCH /cambiar-estado/:userId
 ```
 
@@ -452,7 +452,7 @@ export const changeUserStatus = async (
 
 ## 6. Update Own Profile
 
-```
+```text
 PUT /update-profile
 ```
 
