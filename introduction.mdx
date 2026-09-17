@@ -1,0 +1,69 @@
+---
+title: "Metrica Bienes Raices: Real Estate Management Platform"
+sidebarTitle: "Introduction"
+description: "Metrica Bienes Raices is a full-stack real estate SaaS with role-based dashboards, property management, CRM leads, calendar scheduling, and PDF/Excel exports."
+---
+
+Metrica Bienes Raices is a modern real estate management platform built with React 19, TypeScript, Redux Toolkit, Material UI, and Tailwind CSS. This page introduces the platform's core capabilities — from role-segmented dashboards for administrators, agents, and clients, to an integrated CRM lead pipeline, property catalogue, calendar scheduling system, and rich reporting tools with PDF and Excel export. Whether you are a developer onboarding to the codebase or a technical stakeholder evaluating the product, this introduction gives you a full picture of what the system does and where to go next.
+
+## What is Metrica Bienes Raices?
+
+Metrica Bienes Raices is a full-stack SaaS application designed to centralise every workflow a real estate agency needs: listing and managing properties, tracking anonymous and registered leads through a CRM pipeline, scheduling property visits via a shared calendar, generating reports, and managing the users of the platform. The frontend is a single-page application (SPA) that communicates with a REST API backend over authenticated Bearer-token requests.
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Clone the repo, configure your environment, and have the app running locally in minutes.
+  </Card>
+  <Card title="Architecture Overview" icon="diagram-project" href="/architecture/overview">
+    Understand the directory structure, three-layer layout system, and route organisation.
+  </Card>
+  <Card title="Roles & Permissions" icon="shield-halved" href="/architecture/roles-permissions">
+    Explore how Administrador, Agente, and Cliente roles gate access to every route.
+  </Card>
+  <Card title="API Authentication" icon="key" href="/api/auth/login">
+    Learn how the `auth_token_mbr` Bearer token is obtained and used across all API calls.
+  </Card>
+</CardGroup>
+
+## Key features
+
+<CardGroup cols={3}>
+  <Card title="Role-Based Dashboards" icon="gauge">
+    Three fully separate navigation trees for Administrador, Agente, and Cliente roles, each rendered dynamically from `navigationConfig.ts`.
+  </Card>
+  <Card title="Property Management" icon="house">
+    Admins and agents can create, edit, and list real estate properties. Clients browse available listings from a dedicated read-only view.
+  </Card>
+  <Card title="CRM Lead Pipeline" icon="network-wired">
+    Track anonymous enquiries, registered client requests, and agent-owned cases through a multi-stage CRM with transfer capabilities.
+  </Card>
+  <Card title="Calendar Scheduling" icon="calendar">
+    A shared calendar for property visit scheduling, with separate general and agent-specific views for administrators.
+  </Card>
+  <Card title="PDF & Excel Exports" icon="file-export">
+    Reports and property data can be exported to PDF (via `@react-pdf/renderer` and `jsPDF`) or Excel (via `xlsx` and `xlsx-js-style`).
+  </Card>
+  <Card title="Recharts Analytics" icon="chart-bar">
+    Interactive charts powered by Recharts surface occupancy, lead conversion, and agent performance metrics inside the Reports view.
+  </Card>
+</CardGroup>
+
+## Technology stack
+
+| Layer | Technology |
+|---|---|
+| UI framework | React 19 + TypeScript |
+| Component library | MUI v7 (`@mui/material`) |
+| Utility CSS | Tailwind CSS v3 |
+| State management | Redux Toolkit v2 + redux-persist |
+| Routing | React Router DOM v7 |
+| Build tooling | Create React App + CRACO v7 |
+| Charts | Recharts v3 |
+| PDF export | `@react-pdf/renderer`, jsPDF, html2canvas |
+| Excel export | `xlsx`, `xlsx-js-style`, `file-saver` |
+| Notifications | react-hot-toast, SweetAlert2 |
+| Animation | Motion (Framer Motion successor) |
+
+<Note>
+  The frontend requires a compatible REST API backend to be running and reachable at the URL set in `REACT_APP_API_URL`. All authenticated API calls send the stored `auth_token_mbr` value as a `Bearer` token in the `Authorization` header.
+</Note>

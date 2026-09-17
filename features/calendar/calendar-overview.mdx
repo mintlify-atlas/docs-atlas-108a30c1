@@ -1,0 +1,273 @@
+---
+title: "Calendar System: Events, Agents & Scheduling"
+sidebarTitle: "Calendar"
+description: "Manage property visits, agent schedules, and client appointments with the Metrica Bienes Raices calendar module."
+---
+
+The Calendar module in Metrica Bienes Raices lets administrators and agents create, track, and manage scheduled events tied to clients, properties, and leads. Events move through a well-defined status lifecycle and are surfaced in two distinct calendar views — a global General Calendar visible to admins and a per-agent Agent Calendar that scopes events to individual team members.
+
+## Calendar Views
+
+<CardGroup cols={2}>
+  <Card title="General Calendar" icon="calendar">
+    Accessible at `/administrador/calendario-general`. Displays all events across the organization. Admins can create new events and drill into daily agendas. Backed by `getCalendarEvents()` — `GET /calendar-events`.
+  </Card>
+  <Card title="Agent Calendar" icon="users">
+    Accessible at `/administrador/calendario-agentes`. Lists agents as filterable chips and renders only their events on the grid. Uses `getAgentsCalendar()` — `GET /calendario-agente`.
+  </Card>
+</CardGroup>
+
+## Event Status Lifecycle
+
+Every calendar event carries one of four statuses that drive visual cues and workflow logic throughout the UI:
+
+| Status | Meaning |
+|---|---|
+| `Pendiente` | Scheduled but awaiting confirmation |
+| `Confirmado` | Confirmed and actively on the agenda |
+| `Cancelado` | Cancelled — no longer taking place |
+| `Completado` | The event has concluded |
+
+Statuses are updated independently via `PATCH /event/actualizar-estado/:id` without replacing the full event payload. This keeps state transitions lightweight.
+
+## TypeScript Interfaces
+
+### `CalendarEvent`
+
+The canonical read model returned by list and single-event endpoints.
+
+```typescript
+export type EventStatus =
+  | "Pendiente"
+  | "Confirmado"
+  | "Cancelado"
+  | "Completado";
+
+export interface CalendarEvent {
+  id: number;
+  user_id: number;          // Agent/user who owns the event
+  title: string;
+  description?: string;
+  start_date: string;       // ISO 8601, e.g. "2025-06-15T10:00:00"
+  end_date: string;
+  location?: string;
+  color: string;            // Hex color for calendar rendering
+  all_day: boolean;
+  status: EventStatus;
+  client_id?: number;
+  property_id?: number;
+  client?: Client;          // Populated relation
+  lead?: Lead;
+  property?: Property;
+  created_at: string;
+  updated_at: string;
+}
+```
+
+### `CreateCalendarEvent`
+
+The write model used when creating or fully updating an event.
+
+```typescript
+export interface CreateCalendarEvent {
+  title: string;
+  description?: string;
+  start_date: string;       // ISO 8601, no milliseconds
+  end_date: string;
+  location?: string;
+  color?: string;
+  all_day?: boolean;
+  status: EventStatus;
+  client_id: number | null;
+  lead_id: number | null;
+  property_id: number | null;
+}
+```
+
+### `ChangeStatusEventRequest` / `ChangeStatusEventResponse`
+
+Used exclusively with `PATCH /event/actualizar-estado/:id`.
+
+```typescript
+export interface ChangeStatusEventRequest {
+  status: EventStatus;
+}
+
+export interface ChangeStatusEventResponse {
+  success: boolean;
+  message: string;
+  status: EventStatus;
+}
+```
+
+## API Endpoints
+
+<Tabs>
+  <Tab title="List Events">
+    **`GET /calendar-events`** — Returns all events for the authenticated user. Requires a `Bearer` token.
+
+    ```typescript
+    import { getCalendarEvents } from "./get-calendar-events.service";
+
+    const response = await getCalendarEvents();
+    // response.data is CalendarEvent[]
+    ```
+  </Tab>
+  <Tab title="Get by ID">
+    **`GET /calendar-events-by-id/:id`** — Fetches a single event by its numeric ID.
+
+    ```typescript
+    import { getCalendarEventById } from "./get-calendar-event-by-id.service";
+
+    const response = await getCalendarEventById(42);
+    // response.data is CalendarEvent
+    ```
+  </Tab>
+  <Tab title="Create">
+    **`POST /calendar-events`** — Creates a new event. The body must match `CreateCalendarEvent`.
+
+    ```typescript
+    import { createCalendarEvent } from "./create-calendar-event.service";
+
+    const newEvent = await createCalendarEvent({
+      title: "Visita al apartamento 4B",
+      description: "Primera visita con el cliente González",
+      start_date: "2025-06-20T10:00:00",
+      end_date: "2025-06-20T11:00:00",
+      location: "Calle 80 # 45-12, Bogotá",
+      color: "#144c0b",
+      all_day: false,
+      status: "Pendiente",
+      client_id: 7,
+      lead_id: null,
+      property_id: 3,
+    });
+    ```
+  </Tab>
+  <Tab title="Update">
+    **`PUT /calendar-events/:id`** — Replaces event fields. Accepts a `Partial<CreateCalendarEvent>` so only changed fields need to be sent.
+
+    ```typescript
+    import { updateCalendarEvent } from "./update-calendar-event.service";
+
+    await updateCalendarEvent(42, {
+      status: "Confirmado",
+      location: "Nueva dirección confirmada",
+    });
+    ```
+  </Tab>
+  <Tab title="Delete">
+    **`DELETE /calendar-events/:id`** — Permanently removes an event.
+
+    ```typescript
+    import { deleteCalendarEvent } from "./delete-calendar-event.service";
+
+    await deleteCalendarEvent(42);
+    ```
+  </Tab>
+  <Tab title="Change Status">
+    **`PATCH /event/actualizar-estado/:id`** — Updates only the `status` field. Preferred over a full PUT when transitioning workflow states.
+
+    ```typescript
+    import { changeStatusEventService } from "./change-status-event.service";
+
+    await changeStatusEventService(42, { status: "Completado" }, token);
+    ```
+  </Tab>
+</Tabs>
+
+## Agent Calendar Endpoints
+
+### List Agents with Events
+
+`GET /calendario-agente` returns all agents together with their associated calendar events. This powers the Agent Calendar view's agent filter chips and event grid.
+
+```typescript
+import { getAgentsCalendar } from "./get-agents-calendar.service";
+
+const agentData = await getAgentsCalendar(token);
+// agentData contains agents[], each with calendar_events[]
+```
+
+### Get Agent Event by ID
+
+`GET /calendar-events-agent-by-id/:id` fetches a single event together with its full relational context — the owning agent, the linked client, and the linked property. This endpoint backs the `ViewEventAgentCalendarModal` component.
+
+```typescript
+import { getCalendarAgentEventById } from "./get-calendar-agent-event.service";
+
+const detail = await getCalendarAgentEventById(42);
+// detail.data = { event, agent, client, property }
+```
+
+The response shape is `CalendarAgentEventResponse`:
+
+```typescript
+export interface CalendarAgentEventResponse {
+  success: boolean;
+  message?: string;
+  data: {
+    event: CalendarEventAgent;
+    agent: AgentEventCalendar | null;
+    client: ClientEventCalendar | null;
+    property: PropertyEventCalendar | null;
+  };
+}
+```
+
+## Creating an Event: End-to-End Example
+
+The following TypeScript snippet mirrors the logic used in `CalendaryGeneralView` — it builds a payload that handles all-day events, timed events, and the ISO 8601 format expected by the backend:
+
+```typescript
+import { createCalendarEvent } from "./create-calendar-event.service";
+import { CreateCalendarEvent } from "../../types/calendar/calendar-event.interface";
+
+const formatDateTime = (date: Date): string =>
+  date.toISOString().replace(".000Z", "");
+
+async function scheduleVisit(
+  title: string,
+  date: string,       // "YYYY-MM-DD"
+  time: string,       // "HH:MM"
+  clientId: number,
+  propertyId: number
+): Promise<void> {
+  const startDateTime = new Date(`${date}T${time}:00`);
+  const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000);
+
+  const payload: CreateCalendarEvent = {
+    title,
+    start_date: formatDateTime(startDateTime),
+    end_date: formatDateTime(endDateTime),
+    color: "#144c0b",
+    all_day: false,
+    status: "Pendiente",
+    client_id: clientId,
+    lead_id: null,
+    property_id: propertyId,
+  };
+
+  const result = await createCalendarEvent(payload);
+  console.log("Event created:", result.message);
+}
+```
+
+<Note>
+  All calendar service functions read the Bearer token from the Redux store via `getToken()` in `calendar-api.config.ts`. Make sure the user is authenticated before invoking any calendar service.
+</Note>
+
+## Event Color Coding by Status
+
+The General Calendar view applies Tailwind utility classes based on `event.status` to provide instant visual feedback:
+
+| Status | Background | Text |
+|---|---|---|
+| `Confirmado` | `bg-[#144c0b]/10` | `text-[#144c0b]` |
+| `Pendiente` | `bg-[#0d335a]/10` | `text-[#0d335a]` |
+| `Cancelado` | `bg-red-50` | `text-red-700` |
+| `Completado` | `bg-gray-100` | `text-gray-600` |
+
+<Tip>
+  When creating an event without a specific time (e.g., from a date click), set `all_day: true` and the frontend will automatically assign `start_date` as `T00:00:00` and `end_date` as `T23:59:59` for the selected day.
+</Tip>

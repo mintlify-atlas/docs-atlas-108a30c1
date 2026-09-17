@@ -1,0 +1,153 @@
+---
+title: "Metrica Bienes Raices architecture and project layout"
+sidebarTitle: "Overview"
+description: "Explore the src/ directory structure, three-layer layout system, and how public pages, auth flows, and private role-based dashboards are organised in the codebase."
+---
+
+Metrica Bienes Raices is structured as a single-page React application with a clear separation between public marketing pages, authentication flows, and gated role-based dashboards. This page documents the `src/` directory layout, explains the three distinct layout layers the app uses, and describes how routing ties everything together through `AppRouter.tsx`. Understanding this structure is the foundation for navigating the codebase, adding new features, or debugging access issues.
+
+## Directory structure
+
+```
+MetricaBienesRaices/
+├── public/                        # Static assets (index.html, favicon, etc.)
+├── src/
+│   ├── auth/                      # Login form, register page, per-role dashboard views
+│   │   ├── dashboards/
+│   │   │   ├── admin-dashboard/   # All Administrador-specific view components
+│   │   │   ├── agent-dashboard/   # All Agente-specific view components
+│   │   │   └── client-dashboard/  # All Cliente-specific view components
+│   │   ├── login-form.component.tsx
+│   │   └── register.page.tsx
+│   ├── components/                # Shared UI components (Navbar, Footer, layout shell)
+│   │   └── layout/
+│   │       └── main.layout.tsx    # Sidebar + top bar shell for private pages
+│   ├── config/                    # App-wide configuration (navigationConfig.ts, API configs)
+│   ├── features/                  # Redux Toolkit feature slices
+│   │   └── auth/
+│   │       ├── auth.slice.ts      # State shape, reducers, extraReducers
+│   │       └── auth.thunks.ts     # loginUser and logoutUser async thunks
+│   ├── hooks/                     # Custom React hooks
+│   ├── layout/                    # Route-level layout wrappers
+│   │   ├── auth.layout.tsx        # Centered card layout for login / register
+│   │   ├── private.layout.tsx     # Legacy localStorage auth guard + Outlet
+│   │   └── public.layout.tsx      # Navbar + Footer wrapper for public pages
+│   ├── pages/                     # Top-level page components (Dashboard, NotFound)
+│   ├── routes/                    # Routing configuration
+│   │   ├── AppRouter.tsx          # Root <Routes> tree
+│   │   ├── PrivateRoute.tsx       # Redux-based auth + role guard component
+│   │   └── modules/
+│   │       ├── admin.routes.tsx   # Administrador-only <Route> subtree
+│   │       ├── agent.routes.tsx   # Agente-only <Route> subtree
+│   │       ├── client.routes.tsx  # Cliente-only <Route> subtree
+│   │       └── public.routes.tsx  # Unauthenticated public page routes
+│   ├── services/                  # API call functions (axios-based, per-domain)
+│   │   └── auth/
+│   │       ├── login.service.ts
+│   │       └── logout.service.ts
+│   ├── store/                     # Redux store configuration and typed hooks
+│   │   ├── index.ts               # configureStore + redux-persist setup
+│   │   └── hooks.ts               # useAppDispatch / useAppSelector
+│   ├── types/                     # TypeScript type definitions
+│   │   ├── auth/auth.types.ts
+│   │   ├── navigation/navigation.types.ts
+│   │   └── users/role.types.ts    # UserRole = 'Administrador' | 'Agente' | 'Cliente'
+│   └── utils/                     # Utility / helper functions
+├── craco.config.js                # Webpack override (Node.js polyfills)
+├── tailwind.config.js             # Tailwind brand colours + content paths
+├── package.json
+└── tsconfig.json
+```
+
+## Three-layer architecture
+
+The app uses three distinct layout layers, each corresponding to a different authentication and access state.
+
+<Tabs>
+  <Tab title="Public Layer">
+    **Layout:** `src/layout/public.layout.tsx`
+
+    The public layer wraps unauthenticated marketing and informational pages. It renders a `<Navbar />` at the top and a `<Footer />` at the bottom, with page content injected via React Router's `<Outlet />`. A `<ScrollToTop />` utility component resets the scroll position on route changes.
+
+    ```tsx
+    // src/layout/public.layout.tsx
+    export default function PublicLayout() {
+      return (
+        <>
+          <Navbar />
+          <ScrollToTop />
+          <Outlet />
+          <Footer />
+        </>
+      );
+    }
+    ```
+
+    Public routes are defined in `src/routes/modules/public.routes.tsx` and require no authentication.
+  </Tab>
+
+  <Tab title="Auth Layer">
+    **Layout:** `src/layout/auth.layout.tsx`
+
+    The auth layer is used by the login (`/iniciar-sesion`) and registration (`/registro`) pages. It renders a centred MUI `<Paper>` card with a dark gradient background and the Métrica Bienes Raíces brand header (including the `HomeWork` MUI icon). The card accepts `title` and `subtitle` props for contextual headings.
+
+    ```tsx
+    // src/layout/auth.layout.tsx (simplified)
+    const AuthLayout: React.FC<AuthLayoutProps> = ({ children, title, subtitle }) => (
+      <Box sx={{ background: 'linear-gradient(135deg, #0f172a 0%, #064e3b 100%)' }}>
+        <Container maxWidth="sm">
+          <Paper sx={{ backgroundColor: 'rgba(15, 23, 42, 0.95)' }}>
+            {/* Brand header with HomeWork icon */}
+            <Box>{children}</Box>
+          </Paper>
+        </Container>
+      </Box>
+    );
+    ```
+  </Tab>
+
+  <Tab title="Private Layer">
+    **Layout:** `src/components/layout/main.layout.tsx`
+
+    All authenticated pages are rendered inside `MainLayout`, which provides the sidebar navigation and top application bar. The sidebar items are derived at runtime from `src/config/navigationConfig.ts` by filtering `NavItem` entries whose `roles` array includes the currently logged-in user's role. Page content is injected via `<Outlet />`.
+
+    Access is gated by the `<PrivateRoute>` component, which reads `isAuthenticated` and `role` from the Redux `auth` slice. Routes without an `allowedRoles` prop allow any authenticated user; routes with `allowedRoles` restrict access to the listed roles and redirect unauthorised users to `/panel`.
+
+    See the [Roles & Permissions](/architecture/roles-permissions) page for the full route matrix and the [State Management](/architecture/state-management) page for how auth state is persisted across page refreshes.
+  </Tab>
+</Tabs>
+
+## Routing overview
+
+`AppRouter.tsx` composes the entire route tree by importing three role-specific route modules and a shared `PublicRoutes` export:
+
+```tsx
+// src/routes/AppRouter.tsx
+export default function AppRouter() {
+  return (
+    <Routes>
+      {PublicRoutes}
+      <Route path="/iniciar-sesion" element={<Login />} />
+      <Route path="/registro" element={<Register />} />
+
+      {/* Shared panel — any authenticated user */}
+      <Route element={<PrivateRoute><MainLayout /></PrivateRoute>}>
+        <Route path="/panel" element={<Dashboard />} />
+      </Route>
+
+      {/* Role-scoped subtrees */}
+      {AdminRoutes}   {/* /administrador/* — Administrador only */}
+      {AgentRoutes}   {/* /agente/*         — Agente only       */}
+      {ClientRoutes}  {/* /cliente/*        — Cliente only      */}
+
+      <Route path="*" element={<NotFoundPage />} />
+    </Routes>
+  );
+}
+```
+
+Each role module (e.g. `AdminRoutes`) wraps its `<Route>` children in a `<PrivateRoute allowedRoles={["Administrador"]}>` guard so that even direct URL access is protected.
+
+<Note>
+  The `/panel` dashboard route is intentionally accessible to all three roles — it serves as the post-login landing page before users navigate to their role-specific sections.
+</Note>

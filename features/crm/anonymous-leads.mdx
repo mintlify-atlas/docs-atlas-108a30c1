@@ -1,0 +1,259 @@
+---
+title: "Anonymous Leads — Public Visitor CRM Flow"
+sidebarTitle: "Anonymous Leads"
+description: "Learn how Metrica captures leads from unauthenticated visitors, the data shape returned, and how admins and agents review and update anonymous cases."
+---
+
+Anonymous leads are generated when a public visitor expresses interest in a property on the Metrica portal **without logging in**. Because no account exists, the system collects contact details—full name, email, and phone number—directly in the submission form. The resulting record is immediately routed to the assigned agent's queue and is also visible to administrators across the platform.
+
+## How Anonymous Leads Are Created
+
+The `createLeadAnonymous` service posts to the public `/crear-lead` endpoint with no `Authorization` header. Any visitor on the public property listing page can trigger this flow:
+
+```typescript
+// src/services/leads/create-lead-anonymous.service.ts
+export const createLeadAnonymous = async (
+  formData: FormDataLead
+): Promise<CreateLeadResponse> => {
+  const response = await fetch(`${BASE_URL}/crear-lead`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept:         "application/json",
+      // No Authorization header — public endpoint
+    },
+    body: JSON.stringify(formData),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw data;
+  }
+  return data;
+};
+```
+
+On success the API returns a `CreateLeadResponse` containing the new lead's `id`, `code`, assigned `agent_id`, `property_id`, visitor `full_name`, `interest`, `status`, and `priority`.
+
+## Anonymous Lead Interface
+
+The `AnonymousLead` type, defined in `src/types/leads/get-response-anonymous-lead.interface.ts`, describes each record returned by the admin-facing list endpoint:
+
+```typescript
+export interface AnonymousLead {
+  id:         number;
+  code:       string;   // Unique case code
+  full_name:  string;
+  email:      string;
+  phone:      string;
+  interest:   string;
+  status:     string;   // Nuevo | Visto | En Proceso | Resuelto
+  priority:   string;
+  created_at: string;   // ISO 8601 timestamp
+}
+
+export interface apiResponseLead {
+  success: boolean;
+  message: string;
+  data:    AnonymousLead[];
+}
+```
+
+<ResponseField name="id" type="number">
+  Auto-incremented database identifier for the lead record.
+</ResponseField>
+<ResponseField name="code" type="string">
+  Unique human-readable case code used for searching, filtering, and agent transfers.
+</ResponseField>
+<ResponseField name="full_name" type="string">
+  The visitor's full name as submitted in the public lead form.
+</ResponseField>
+<ResponseField name="email" type="string">
+  Contact email address provided by the visitor.
+</ResponseField>
+<ResponseField name="phone" type="string">
+  Contact phone number provided by the visitor.
+</ResponseField>
+<ResponseField name="interest" type="string">
+  The property or service category the visitor expressed interest in.
+</ResponseField>
+<ResponseField name="status" type="string">
+  Current case lifecycle status: `Nuevo`, `Visto`, `En Proceso`, or `Resuelto`.
+</ResponseField>
+<ResponseField name="priority" type="string">
+  Priority level assigned by the system or agent (e.g. `Alta`, `Media`, `Baja`).
+</ResponseField>
+<ResponseField name="created_at" type="string">
+  ISO 8601 creation timestamp.
+</ResponseField>
+
+## Agent-Scoped Anonymous Leads
+
+Agents only retrieve leads **assigned to them**, not the full platform list. This is handled by a separate endpoint and type:
+
+```typescript
+// src/types/leads/get-response-anonymous-agente-lead.interface.ts
+export interface AnonymousLeadAgent {
+  id:         number;
+  code:       string;
+  full_name:  string;
+  email:      string;
+  phone:      string;
+  interest:   string;
+  status:     string;
+  priority:   string;
+  created_at: string;
+}
+
+export interface apiResponseLeadAgent {
+  success: boolean;
+  message: string;
+  data:    AnonymousLeadAgent[];
+}
+```
+
+<Tabs>
+  <Tab title="Admin Endpoint">
+    ```typescript
+    // src/services/leads/get-lead-anonymous.service.ts
+    export const getDataAnonymousLeadService = async (
+      token: string
+    ): Promise<AnonymousLead[]> => {
+      const response = await fetch(
+        `${BASE_URL}/mostrar-leads-anonimos`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization:  `Bearer ${token}`,
+          },
+        }
+      );
+      const result: apiResponseLead = await response.json();
+      return result.data;
+    };
+    ```
+    **Endpoint:** `GET /mostrar-leads-anonimos`  
+    Returns all anonymous leads on the platform. Requires an Administrator Bearer token.
+  </Tab>
+  <Tab title="Agent Endpoint">
+    ```typescript
+    // src/services/leads/get-lead-anonymous-agent.service.ts
+    export const getDataAnonymousLeadAgentService = async (
+      token: string
+    ): Promise<AnonymousLeadAgent[]> => {
+      const response = await fetch(
+        `${BASE_URL}/mostrar-leads-agente-anonimos`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization:  `Bearer ${token}`,
+          },
+        }
+      );
+      const result: apiResponseLeadAgent = await response.json();
+      return result.data;
+    };
+    ```
+    **Endpoint:** `GET /mostrar-leads-agente-anonimos`  
+    Returns only the leads assigned to the authenticated agent.
+  </Tab>
+</Tabs>
+
+## Status Update Flow
+
+Both admins and agents can advance an anonymous lead through its lifecycle. Two separate PATCH services handle status updates depending on context:
+
+### Inline Status Toggle (from list view)
+
+```typescript
+// src/services/leads/patch-change-lead-anonymous.service.ts
+export const changeStatusAnonymousLead = async (
+  id:    number,
+  token: string
+) => {
+  const response = await fetch(
+    `${BASE_URL}/change-status-anonymous-leads/${id}`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Accept:         "application/json",
+        Authorization:  `Bearer ${token}`,
+      },
+    }
+  );
+  return await response.json();
+};
+```
+
+**Endpoint:** `PATCH /change-status-anonymous-leads/:id`  
+This toggle-style endpoint advances the lead to the next status without a body payload.
+
+### Full Status Update (from detail view)
+
+```typescript
+// src/services/leads/patch-update-status-lead.service.ts
+export const updateStatusAnonymousLead = async (
+  id:     number,
+  status: string,
+  token:  string
+) => {
+  const response = await fetch(
+    `${BASE_URL}/change-status-anonymous-leads-view-details/${id}`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization:  `Bearer ${token}`,
+      },
+      body: JSON.stringify({ status }),
+    }
+  );
+  return await response.json();
+};
+```
+
+**Endpoint:** `PATCH /change-status-anonymous-leads-view-details/:id`  
+Accepts an explicit `{ status }` body, allowing any valid status value to be set directly.
+
+## Review & Approval Workflow
+
+<Steps>
+  <Step title="Visitor submits lead">
+    A public visitor fills in the lead form on a property listing page. `createLeadAnonymous` posts to `/crear-lead` without authentication. The system creates the record with status `Nuevo` and assigns it to an agent.
+  </Step>
+  <Step title="Agent / Admin sees new lead">
+    The lead appears in the **Solicitudes Anónimas** tab of the Admin Dashboard (`/administrador/casos/anonimos`) and in the Agent Dashboard's anonymous cases view (`/agente/casos/anonimos`). The `useCRMRequests` / `useCRMRequestsAnonymous` hooks fetch the list on mount.
+  </Step>
+  <Step title="Case is opened (Visto)">
+    When the agent opens the lead card for the first time, the status advances to `Visto`. The `RequestCard` / `RequestCardAgentLead` components expose an `onStatusChange` callback that triggers the inline PATCH service.
+  </Step>
+  <Step title="Agent works the case (En Proceso)">
+    Once the agent begins active follow-up (contacting the visitor, scheduling a visit), they update the status to `En Proceso`. This is visible in the "En Proceso" tab across both dashboards.
+  </Step>
+  <Step title="Case resolved">
+    After the interest is fulfilled or the lead is closed, the agent marks it `Resuelto`. The lead moves to the "Resueltos" tab and is no longer counted in active workload metrics.
+  </Step>
+</Steps>
+
+## Search & Filtering
+
+The anonymous leads views provide a search bar that filters by `code`. Entering a code and pressing **Enter** or clicking **Buscar** sets `appliedSearch`, which filters the current tab's records. The view also auto-switches to the tab containing the matching code:
+
+```typescript
+const existeEnNuevos    = nuevos.some(r => r.code?.toLowerCase().includes(code));
+const existeEnProceso   = enProceso.some(r => r.code?.toLowerCase().includes(code));
+const existeEnResueltos = resueltos.some(r => r.code?.toLowerCase().includes(code));
+
+if      (existeEnNuevos)    setActiveTab("nuevos");
+else if (existeEnProceso)   setActiveTab("en_proceso");
+else if (existeEnResueltos) setActiveTab("resueltos");
+else                        setActiveTab("todos");
+```
+
+<Warning>
+  The API returns HTTP 404 when no anonymous leads are stored (`"No hay registos almacenados"`). The service throws this as an `Error` that the consuming hook should catch and expose as an `error` state to avoid a blank screen.
+</Warning>

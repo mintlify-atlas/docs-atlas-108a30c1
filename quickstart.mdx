@@ -1,47 +1,116 @@
 ---
-title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+title: "Get started with Metrica Bienes Raices"
+sidebarTitle: "Quickstart"
+description: "Clone the Metrica Bienes Raices repo, set your environment variables, install dependencies, and start the development server in under five minutes."
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
-
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
+This quickstart walks you through every step needed to run Metrica Bienes Raices on your local machine — from cloning the repository and copying the environment file through installing dependencies and launching the CRACO-powered development server. By the end you will have the SPA running at `http://localhost:3000` and connected to your backend API. The app uses `craco start` (not `react-scripts start` directly) because CRACO layers additional Webpack polyfills and PostCSS configuration on top of Create React App.
 
 ## Prerequisites
 
-Before you begin, you must have:
-
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
-
-## Get started
+- **Node.js 18+** and **npm 9+** (or Yarn / pnpm equivalents)
+- A running instance of the Metrica Bienes Raices REST API backend
+- Git installed on your machine
 
 <Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
+  <Step title="Clone the repository">
+    Clone the project from GitHub and navigate into the directory.
 
     ```bash
-    npm install your-package
+    git clone https://github.com/Gxrman-exe/MetricaBienesRaices.git
+    cd MetricaBienesRaices
     ```
   </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
+
+  <Step title="Create your environment file">
+    The app reads configuration from a `.env` file in the project root. Copy the example template to get started.
 
     ```bash
-    your-cli init
+    cp .env.example .env
     ```
+
+    <Note>
+      If no `.env.example` exists yet, create `.env` manually. All Create React App environment variables **must** be prefixed with `REACT_APP_` to be embedded into the build. Variables without this prefix are silently ignored at runtime.
+    </Note>
   </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
+
+  <Step title="Set your API URL">
+    Open `.env` and set the base URL of your backend. This value is consumed throughout the app as `process.env.REACT_APP_API_URL`.
+
+    ```bash .env
+    # Primary REST API base URL — used by all service files (e.g. login.service.ts)
+    REACT_APP_API_URL=http://localhost:8000/api
+
+    # Optional: dedicated calendar microservice URL (consumed by calendar-api.config.ts)
+    REACT_APP_CALENDAR_API_URL=http://localhost:8001/api
+    ```
+
+    <Warning>
+      Never commit your `.env` file to version control. It is already listed in `.gitignore` by default with Create React App projects.
+    </Warning>
+  </Step>
+
+  <Step title="Install dependencies">
+    Install all npm packages declared in `package.json`. Use whichever package manager you prefer.
+
+    <CodeGroup>
+      ```bash npm
+      npm install
+      ```
+
+      ```bash yarn
+      yarn install
+      ```
+
+      ```bash pnpm
+      pnpm install
+      ```
+    </CodeGroup>
+
+    Key packages installed include `react@^19.2.4`, `@reduxjs/toolkit@^2.11.2`, `@mui/material@^7.3.9`, `tailwindcss@^3.4.0`, `react-router-dom@^7.13.2`, and `redux-persist@^6.0.0`.
+  </Step>
+
+  <Step title="Start the development server">
+    Launch the app with the `start` script, which runs `craco start` under the hood. CRACO applies the custom Webpack configuration from `craco.config.js` (Node.js polyfills for `buffer`, `stream`, `zlib`, etc.) before handing off to CRA's dev server.
 
     ```bash
-    your-cli start
+    npm start
     ```
+
+    The terminal will print:
+
+    ```
+    Compiled successfully!
+
+    You can now view metricabienesraices in the browser.
+
+      Local:            http://localhost:3000
+      On Your Network:  http://192.168.x.x:3000
+    ```
+
+    Open [http://localhost:3000](http://localhost:3000) and you should see the public landing page. Navigate to `/iniciar-sesion` to reach the login screen.
   </Step>
 </Steps>
 
-<Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
+## Available scripts
 
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
-</Tip>
+All scripts are executed via CRACO rather than `react-scripts` directly.
+
+| Script | Command | Description |
+|---|---|---|
+| `npm start` | `craco start` | Starts the hot-reloading development server on port 3000 |
+| `npm run build` | `craco build` | Creates an optimised production build in the `build/` folder |
+| `npm test` | `craco test` | Runs the Jest test suite with React Testing Library |
+| `npm run eject` | `craco eject` | Ejects from CRACO (irreversible — use with caution) |
+
+## Verify your setup
+
+After starting the dev server, confirm the following:
+
+- `/` renders the public landing page with a Navbar and Footer (from `PublicLayout`)
+- `/iniciar-sesion` renders the `AuthLayout` login card with the Métrica Bienes Raíces branding
+- Logging in with valid credentials stores the `auth_token_mbr` in `localStorage` via redux-persist and redirects you to `/panel`
+
+<Note>
+  All private routes (`/administrador/*`, `/agente/*`, `/cliente/*`, and `/panel`) require a valid session. If the API is unreachable, the login thunk will reject with an error and no token will be stored. Ensure `REACT_APP_API_URL` points to a live backend before testing authenticated flows.
+</Note>

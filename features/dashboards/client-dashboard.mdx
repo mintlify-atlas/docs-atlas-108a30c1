@@ -1,0 +1,194 @@
+---
+title: "Client Dashboard — Properties, Requests & Profile"
+sidebarTitle: "Client Dashboard"
+description: "Guide to the Metrica Client Dashboard: browsing available properties, submitting CRM lead requests linked to agents and properties, and managing a profile."
+---
+
+The **Client Dashboard** is the authenticated portal for property seekers using the Metrica Bienes Raices platform. Once a visitor creates an account and logs in, they gain access to a personalised workspace where they can browse available listings, submit interest requests directly to agents, track the progress of their cases, and manage their profile settings.
+
+## Navigation Structure
+
+All sidebar entries for the `Cliente` role are defined in `navigationConfig` with `roles: ['Cliente']`:
+
+| Label | Path | Icon | Description |
+|---|---|---|---|
+| Dashboard | `/panel` | List | Shared summary panel (all roles) |
+| Propiedades Disponibles | `/cliente/propiedad` | Building2 | Browse active property listings |
+| Solicitudes | `/cliente/solicitudes` | FileText | View and manage CRM lead requests |
+| Configuración | `/cliente/configuracion-perfil` | Settings | Update profile settings |
+
+The Configuración entry has `divider: true`, rendering a visual separator above it in the sidebar.
+
+## Dashboard Summary Panel
+
+The `ClientDashboard` component (`client-dashboard.page.tsx`) renders four personal KPI cards:
+
+<CardGroup cols={2}>
+  <Card title="Favoritos" icon="heart">
+    Count of properties the client has saved to their favourites list, with a weekly delta.
+  </Card>
+  <Card title="Búsquedas Guardadas" icon="map-pin">
+    Saved property search filters with a badge showing new matching properties.
+  </Card>
+  <Card title="Presupuesto Estimado" icon="dollar-sign">
+    The client's estimated budget, used to surface relevant property recommendations.
+  </Card>
+  <Card title="Alertas Activas" icon="bell">
+    Active property match alerts, indicating how many new properties match the client's criteria.
+  </Card>
+</CardGroup>
+
+Below the KPIs the panel renders:
+
+- **Propiedades Favoritas** — a 3-column card grid of saved properties showing title, location, price, star rating, and a *Ver detalles* button.
+- **Actividad Reciente** — a timeline of the client's most recent actions (property viewed, property saved, agent contact).
+- **Recomendaciones Personalizadas** — algorithmically surfaced suggestions based on saved searches and browsing history.
+
+## Available Properties View
+
+**Route:** `/cliente/propiedad`  
+**Component:** `AvailablePropertiesClient` (`available-properties.view.tsx`)
+
+This view renders all publicly listed properties the client can browse and enquire about. Data is fetched on mount via `getProperties()` (no auth token required — public endpoint):
+
+```typescript
+useEffect(() => {
+  const fetchData = async () => {
+    const res = await getProperties();
+    setProperties(res.data || []);
+  };
+  fetchData();
+}, []);
+```
+
+### Filters
+
+The view provides three filter controls rendered in a sticky filter bar:
+
+<ParamField query="searchTerm" type="string">
+  Free-text search matched against property `title` and `location` fields (case-insensitive).
+</ParamField>
+<ParamField query="type" type="string">
+  Dropdown populated dynamically from unique `type` values in the fetched data (e.g. Casa, Apartamento, Oficina). Selecting "Todos" clears the filter.
+</ParamField>
+<ParamField query="location" type="string">
+  Dropdown populated dynamically from unique `location` values. Selecting "Todos" clears the filter.
+</ParamField>
+
+The **clear filters** button (`X`) resets all three filters to empty. The filtered result set is sliced to the first 6 properties (`featured`), rendering them as `PropertyCardClient` components in a responsive 3-column grid. A skeleton loader (`PropertySkeleton`) is shown for each card during the fetch.
+
+## CRM Requests View
+
+**Route:** `/cliente/solicitudes`  
+**Component:** `CRMRequestView` (`crm-requests.view.tsx`)
+
+This view lets clients track all CRM lead requests they have submitted. Each request shows:
+
+- A unique **ID** (e.g. `CRM-001`)
+- **Client name** and **email**
+- **Property type** interested in
+- **Priority** badge (Alta / Media / Baja) with a trend icon
+- **Status** badge (Pendiente / En Proceso / Completado / Cancelado)
+- **Assigned agent** name
+- **Creation date** formatted in `es-CO` locale
+- **Action buttons**: View details, Edit, Delete
+
+The table supports client-side sort on any column and filters by status, priority, and free-text search (name, ID, or email). Clicking a row opens a detail modal.
+
+### Status Values
+
+| Status Key | Spanish Label | Badge Colour |
+|---|---|---|
+| `pending` | Pendiente | Amber |
+| `in_progress` | En Proceso | Blue |
+| `completed` | Completado | Green |
+| `cancelled` | Cancelado | Red |
+
+### Priority Values
+
+| Priority Key | Spanish Label | Badge Colour |
+|---|---|---|
+| `high` | Alta | Red |
+| `medium` | Media | Amber |
+| `low` | Baja | Green |
+
+## Submitting a CRM Lead Request
+
+Authenticated clients create new leads via `createLead`, which calls `POST /client-crear-lead` with a Bearer token. The `CreateLeadPayload` must be populated from property and agent selections made on the properties page:
+
+```typescript
+// src/types/leads/leads.interface.ts
+export interface CreateLeadPayload {
+  agent_id:    number;  // ID of the agent to assign
+  property_id: number;  // ID of the property of interest
+  type:        string;  // Enquiry type (e.g. "Compra", "Arriendo")
+  note:        string;  // Client's message
+}
+```
+
+<ParamField body="agent_id" type="number" required>
+  The numeric ID of the agent the client wants to work with. Agents are listed on property detail pages.
+</ParamField>
+<ParamField body="property_id" type="number" required>
+  The numeric ID of the property the client is enquiring about.
+</ParamField>
+<ParamField body="type" type="string" required>
+  A category string describing the nature of the request (purchase, rental, valuation, etc.).
+</ParamField>
+<ParamField body="note" type="string" required>
+  A free-text message from the client to the agent, included in the lead record.
+</ParamField>
+
+```typescript
+// src/services/leads/create-lead.service.ts
+export const createLead = async (
+  payload: CreateLeadPayload,
+  token:   string
+): Promise<CreateLeadResponse> => {
+  const response = await fetch(`${BASE_URL}/client-crear-lead`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept:         "application/json",
+      Authorization:  `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  // ...
+};
+```
+
+On success the `CreateLeadResponse` includes the new lead's `id`, `code`, `agent_id`, `property_id`, `full_name`, `interest`, `status` (`Nuevo`), and `priority`.
+
+<Steps>
+  <Step title="Browse available properties">
+    Navigate to `/cliente/propiedad`. Use the search bar and dropdown filters to find a property of interest.
+  </Step>
+  <Step title="Open property details">
+    Click a `PropertyCardClient` to view full property details including the assigned agent's information.
+  </Step>
+  <Step title="Submit a request">
+    Use the lead submission form on the property detail page. Fill in `type` and `note`, then submit. The `agent_id` and `property_id` are pre-populated from the selected property.
+  </Step>
+  <Step title="Track your request">
+    Navigate to `/cliente/solicitudes` to see the new request in the CRM table with status `Pendiente`. The assigned agent will update the status as they progress the case.
+  </Step>
+</Steps>
+
+## Profile Configuration
+
+**Route:** `/cliente/configuracion-perfil`
+
+Clients can update their personal information (name, contact details, password) from this settings page. The route is separated from workspace features by the `divider: true` flag in `navigationConfig`.
+
+## Data Access Scope
+
+Clients have a read-only, self-scoped view of the platform:
+
+- They can see **all available properties** (public endpoint, no auth required for listing).
+- They can create leads **linked to themselves**, but cannot view other clients' requests.
+- They **cannot** access any `/administrador/*` or `/agente/*` routes; attempting to do so is blocked by the role guard.
+
+<Tip>
+  The client role is the only role that does not require a Bearer token to load the properties listing. The `getProperties()` service is a public fetch, meaning the property catalogue can also be browsed before logging in — but submitting a lead request always requires authentication.
+</Tip>

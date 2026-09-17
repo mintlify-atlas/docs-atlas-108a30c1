@@ -1,0 +1,207 @@
+---
+title: "User Login and Registration — Metrica Bienes Raices"
+sidebarTitle: "Login & Register"
+description: "Learn how authentication works in Metrica Bienes Raices: JWT-based login via POST /iniciar-sesion, Redux state management, and the registration flow."
+---
+
+Metrica Bienes Raices uses a JWT-based authentication system. On a successful login the server returns a Bearer token (`auth_token_mbr`) that is stored in a Redux slice and persisted across page reloads via redux-persist. Every subsequent request to a protected endpoint attaches this token in the `Authorization` header. Registration is available at the public route `/registro` and requires a valid email, a username, and a password that meets strength requirements.
+
+## Login
+
+### Endpoint
+
+```
+POST ${BASE_URL}/iniciar-sesion
+Content-Type: application/json
+```
+
+### LoginCredentials interface
+
+The `Login` component binds a `LoginCredentials` object to its form state before dispatching the `loginUser` thunk.
+
+```typescript
+// src/types/auth/auth.types.ts
+export interface LoginCredentials {
+  email: string;
+  password: string;
+  rememberMe: boolean; // stores email in localStorage when true
+}
+```
+
+<Note>
+  `rememberMe` is a client-side convenience field only. The backend receives only `email` and `password`. When `true`, the email is written to `localStorage` under the key `"credentials"` so the field is pre-populated on the next visit.
+</Note>
+
+### Login flow
+
+<Steps>
+  <Step title="User submits credentials">
+    The `Login` component collects `email` and `password` from MUI `TextField` inputs and calls `dispatch(loginUser(credentials))`, which triggers the `loginUser` async thunk.
+  </Step>
+
+  <Step title="HTTP request to /iniciar-sesion">
+    The `loginRequest` service sends a `POST` with a JSON body. Only `email` and `password` are forwarded to the API — `rememberMe` is never transmitted.
+
+    ```typescript
+    // src/services/auth/login.service.ts
+    export const loginRequest = async (credentials: LoginCredentials) => {
+      const response = await fetch(`${BASE_URL}/iniciar-sesion`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: credentials.email,
+          password: credentials.password,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Error en la solicitud');
+      return data;
+    };
+    ```
+  </Step>
+
+  <Step title="Server response processed by thunk">
+    The thunk extracts `user` and `auth_token_mbr` from `result.data`. If `user.active` is `false` a `403` rejection is returned immediately before any state is written.
+
+    ```typescript
+    // src/features/auth/auth.thunks.ts
+    const { user, auth_token_mbr } = result.data;
+
+    if (!user.active) {
+      return rejectWithValue({ status: 403, message: 'Usuario desactivado' });
+    }
+
+    return {
+      email: user.email,
+      username: user.username,
+      role: user.role,
+      active: user.active,
+      auth_token_mbr,
+    };
+    ```
+  </Step>
+
+  <Step title="Redux auth slice updated">
+    On `loginUser.fulfilled` the auth slice writes the payload into its state and flips `isAuthenticated` to `true`.
+
+    ```typescript
+    // AuthState shape — src/features/auth/auth.slice.ts
+    interface AuthState {
+      email: string | null;
+      username: string | null;
+      role: string | null;          // 'admin' | 'client' | 'agent'
+      auth_token_mbr: string | null; // JWT Bearer token
+      active: boolean;
+      isAuthenticated: boolean;
+      loading: boolean;
+      error: any;
+    }
+    ```
+  </Step>
+
+  <Step title="Redirect to dashboard">
+    When `loginUser.fulfilled` matches, the component optionally writes `email` to `localStorage` (if `rememberMe` is set) and then navigates to `redirectPath`, which defaults to `/panel`.
+  </Step>
+</Steps>
+
+### Error handling
+
+| HTTP status | Description | User-facing message |
+|---|---|---|
+| `404` | User not found | *Usuario no registrado* |
+| `401` | Wrong password | *Contraseña incorrecta* |
+| `403` | Account disabled | *Usuario desactivado* |
+| Other | Network / server error | Generic error message |
+
+### Using the token on protected requests
+
+After a successful login, `auth_token_mbr` is available via the Redux store. Pass it as a Bearer token for any authenticated API call:
+
+```typescript
+import { useAppSelector } from '../store/hooks';
+
+const { auth_token_mbr } = useAppSelector((state) => state.auth);
+
+const response = await fetch(`${BASE_URL}/admin-listar-propiedades`, {
+  method: 'GET',
+  headers: {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${auth_token_mbr}`,
+  },
+});
+```
+
+<Tip>
+  The Redux store is persisted with redux-persist so the token survives hard refreshes. You do not need to re-authenticate between browser sessions unless the JWT expires or the user explicitly logs out.
+</Tip>
+
+---
+
+## Registration
+
+### Route
+
+New users register at the public route `/registro`, which renders the `Register` page component.
+
+### RegisterData interface
+
+```typescript
+// src/types/auth/auth.types.ts
+export interface RegisterData {
+  email: string;
+  username: string;
+  password: string;
+}
+```
+
+### Password requirements
+
+The `Register` component validates the form client-side before calling the API. A password is accepted only when it meets **all** of the following:
+
+<CardGroup cols={2}>
+  <Card title="Minimum length" icon="text-size">
+    At least **8 characters** total.
+  </Card>
+  <Card title="Uppercase letter" icon="font-case">
+    At least **one uppercase** letter (A–Z).
+  </Card>
+  <Card title="Lowercase letter" icon="text">
+    At least **one lowercase** letter (a–z).
+  </Card>
+  <Card title="Number" icon="hashtag">
+    At least **one numeric** digit (0–9).
+  </Card>
+</CardGroup>
+
+### Registration flow
+
+<Steps>
+  <Step title="Fill out the form">
+    The user provides their email, a username (minimum 3 characters), and a password that passes the strength checks shown in the live requirements panel.
+  </Step>
+
+  <Step title="Client-side validation">
+    `validateForm()` runs synchronously on submit. If any rule fails, a `ServiceAlert.error` toast is shown and the request is not sent.
+  </Step>
+
+  <Step title="POST to registration endpoint">
+    `registerUserClient` sends the `RegisterData` payload to the registration API endpoint.
+
+    ```typescript
+    await registerUserClient({
+      email: formData.email,
+      username: formData.username,
+      password: formData.password,
+    });
+    ```
+  </Step>
+
+  <Step title="Success and redirect">
+    On success, a `ServiceAlert.success` toast is shown and the user is redirected to `/iniciar-sesion` after 1.5 seconds.
+  </Step>
+</Steps>
+
+<Warning>
+  Usernames must be at least 3 characters. Emails must contain an `@` symbol. Backend validation errors surface as a `ServiceAlert.error` with the first validation message returned by the API.
+</Warning>

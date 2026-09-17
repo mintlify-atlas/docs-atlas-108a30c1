@@ -1,0 +1,235 @@
+---
+title: "Update or Delete a Property — Metrica Bienes Raices API"
+sidebarTitle: "Update Status"
+description: "PATCH a property's availability status between Disponible, Vendido, and No Disponible, or permanently DELETE a listing by its ID."
+---
+
+This page covers two administrative property management operations: updating a listing's availability status and permanently deleting a property record. Both operations require a valid Bearer token with Administrator privileges. The status update is a partial operation (PATCH) and only modifies the `status` field, leaving all other property data intact.
+
+## 1. Update Property Status
+
+```
+PATCH /update/properties/:propertyId/status
+```
+
+**Authentication:** `Authorization: Bearer <token>` — Administrator role required.
+
+**Content-Type:** `application/json`
+
+Use this endpoint to transition a property between availability states without modifying any other listing data. The three valid states represent the full lifecycle of a listing on the platform.
+
+### Path parameters
+
+<ParamField path="propertyId" type="number" required>
+  The numeric ID of the property whose status should be updated.
+</ParamField>
+
+### Request body
+
+<ParamField body="status" type="string" required>
+  New status for the property. Must be one of the three accepted values:
+
+  | Value | Meaning |
+  |-------|---------|
+  | `"Disponible"` | The property is actively listed and available for sale or rent. |
+  | `"Vendido"` | The property has been sold or rented and is no longer available. |
+  | `"No Disponible"` | The listing is temporarily hidden or taken off market. |
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  `true` when the status was updated successfully.
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  Descriptive outcome message, e.g. `"Estado actualizado correctamente"`.
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Confirmation object echoing the updated property.
+
+  <Expandable title="data fields">
+    <ResponseField name="id" type="number">
+      ID of the updated property.
+    </ResponseField>
+
+    <ResponseField name="status" type="string">
+      The new status that was applied: `"Disponible"`, `"Vendido"`, or `"No Disponible"`.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### TypeScript types
+
+```typescript
+export type PropertyStatus = "Disponible" | "Vendido" | "No Disponible";
+
+export interface UpdatePropertyStatusResponse {
+  success: boolean;
+  message: string;
+  data?: {
+    id: number;
+    status: PropertyStatus;
+  };
+}
+```
+
+### cURL example
+
+```bash
+curl --request PATCH \
+  --url "${REACT_APP_API_URL}/update/properties/14/status" \
+  --header "Authorization: Bearer <token>" \
+  --header "Content-Type: application/json" \
+  --header "Accept: application/json" \
+  --data '{ "status": "Vendido" }'
+```
+
+### TypeScript example
+
+```typescript
+export type PropertyStatus = "Disponible" | "Vendido" | "No Disponible";
+
+export async function updatePropertyStatusService(
+  propertyId: number,
+  status: PropertyStatus,
+  token: string
+): Promise<UpdatePropertyStatusResponse> {
+  const response = await fetch(
+    `${BASE_URL}/update/properties/${propertyId}/status`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ status }),
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.message ?? "Ocurrió un error.");
+  }
+
+  return data;
+}
+```
+
+### Sample response
+
+```json
+{
+  "success": true,
+  "message": "Estado actualizado correctamente",
+  "data": {
+    "id": 14,
+    "status": "Vendido"
+  }
+}
+```
+
+---
+
+## 2. Delete Property by ID
+
+```
+DELETE /admin/delete-property/:propertyId
+```
+
+**Authentication:** `Authorization: Bearer <token>` — Administrator role required.
+
+Permanently removes a property listing and all associated data (images, leads linked to the property) from the database. This action is **irreversible** — there is no soft-delete mechanism.
+
+<Warning>
+  Deleting a property is a permanent, irreversible operation. All associated images stored in the backend's storage bucket and any leads linked to the property may also be removed depending on cascade rules. Always confirm with the user before dispatching this request.
+</Warning>
+
+### Path parameters
+
+<ParamField path="propertyId" type="number" required>
+  The numeric ID of the property to delete.
+</ParamField>
+
+### Response
+
+The response body is a plain JSON object containing at minimum a `message` string.
+
+<ResponseField name="message" type="string" required>
+  Confirmation message, e.g. `"Propiedad eliminada exitosamente"`.
+</ResponseField>
+
+<ResponseField name="success" type="boolean">
+  `true` on successful deletion (present in most responses).
+</ResponseField>
+
+### cURL example
+
+```bash
+curl --request DELETE \
+  --url "${REACT_APP_API_URL}/admin/delete-property/14" \
+  --header "Authorization: Bearer <token>"
+```
+
+### TypeScript example
+
+```typescript
+const BASE_URL = process.env.REACT_APP_API_URL;
+
+export const deletePropertyByIdService = async (
+  propertyId: number,
+  token: string
+) => {
+  const response = await fetch(
+    `${BASE_URL}/admin/delete-property/${propertyId}`,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+
+  const text = await response.text();
+
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error("Respuesta inválida del servidor");
+  }
+
+  if (!response.ok) {
+    throw new Error(data?.message || "Error eliminando propiedad");
+  }
+
+  return data;
+};
+```
+
+### Sample response
+
+```json
+{
+  "success": true,
+  "message": "Propiedad eliminada exitosamente"
+}
+```
+
+## Error handling
+
+| HTTP Status | Endpoint | Meaning |
+|-------------|----------|---------|
+| `200` | Both | Operation completed successfully. |
+| `400` | PATCH | Invalid `status` value provided. |
+| `401` | Both | Missing or expired Bearer token. |
+| `403` | Both | Insufficient permissions — Administrator role required. |
+| `404` | Both | No property found for the given `propertyId`. |
+| `500` | Both | Internal server error. |
+
+<Tip>
+  After a successful status change, dispatch the `getPropertiesFullDataAdmin` thunk to refresh the admin properties list in the Redux store, ensuring the UI reflects the latest state without a full page reload.
+</Tip>

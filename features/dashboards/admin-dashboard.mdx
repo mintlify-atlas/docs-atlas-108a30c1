@@ -1,0 +1,185 @@
+---
+title: "Admin Dashboard — Platform Overview & Management"
+sidebarTitle: "Admin Dashboard"
+description: "Explore the Metrica Administrator Dashboard: platform KPIs, user management, property oversight, CRM case views, case transfers, and navigation structure."
+---
+
+The **Administrator Dashboard** is the central nerve centre of the Metrica Bienes Raices platform. It is accessible only to users whose role is `Administrador` (enforced by `allowedRoles={["Administrador"]}` on the route guard) and exposes a comprehensive view of every entity in the system—users, properties, leads, agents, and aggregate statistics.
+
+The dashboard opens at `/panel` (shared entry point) and then routes into the `/administrador/*` namespace for all sub-sections. On first load the `useDashboardInformation` hook fetches live KPIs from `GET /dashboard-information`.
+
+## Platform KPIs
+
+The header card row surfaces six live counters from `DashboardInformationData`:
+
+<CardGroup cols={3}>
+  <Card title="Total Users" icon="users">
+    `total_users` — all platform accounts regardless of role.
+  </Card>
+  <Card title="Total Properties" icon="building">
+    `total_properties` — every property record in the system.
+  </Card>
+  <Card title="Available Properties" icon="circle-check">
+    `available_properties` — properties with status `Disponible`.
+  </Card>
+  <Card title="Unavailable Properties" icon="circle-x">
+    `not_available_properties` — properties marked `No Disponible`.
+  </Card>
+  <Card title="Sold Properties" icon="tag">
+    `sold_properties` — properties with status `Vendida`.
+  </Card>
+  <Card title="User Breakdown" icon="chart-pie">
+    `total_administrators`, `total_agents`, `total_clients` — displayed in the Distribución de Usuarios pie chart.
+  </Card>
+</CardGroup>
+
+### Dashboard Information Service
+
+```typescript
+// src/services/dashboard/get-dashboard-information.service.ts
+export const getDashboardInformation = async (
+  token: string
+): Promise<DashboardInformationResponse> => {
+  const response = await fetch(`${BASE_URL}/dashboard-information`, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization:  `Bearer ${token}`,
+    },
+  });
+  // ...
+};
+```
+
+**Endpoint:** `GET /dashboard-information`  
+**Auth:** Administrator Bearer token required
+
+```typescript
+// src/types/dashboard/dashboard-information.types.ts
+export interface DashboardInformationData {
+  total_properties:         number;
+  available_properties:     number;
+  not_available_properties: number;
+  sold_properties:          number;
+  total_users:              number;
+  total_administrators:     number;
+  total_agents:             number;
+  total_clients:            number;
+}
+```
+
+## Navigation Structure
+
+The `navigationConfig` restricts all `/administrador/*` items to the `Administrador` role. The full sidebar structure is:
+
+| Label | Path | Icon | Notes |
+|---|---|---|---|
+| Dashboard | `/panel` | List | Shared across all roles |
+| Usuarios | `/administrador/usuarios` | Users | User management table |
+| Propiedades | `/administrador/propiedades` | Home | Property grid with publish/delete/status |
+| Solicitudes Anónimas | `/administrador/casos/anonimos` | FileText | Anonymous leads CRM view |
+| Solicitudes (CRM) | `/administrador/casos/crm` | Users | Registered client leads |
+| Solicitudes Agente | `/administrador/casos/agentes-casos` | FileUser | Leads grouped by agent |
+| Transferir Caso | `/administrador/transferencia/tranferir-caso` | MoveHorizontal | Case reassignment tool |
+| Reportes | `/administrador/reportes` | BarChart3 | Reports (in development) |
+| Calendario General | `/administrador/calendario/calendario-general` | CalendarRange | General calendar |
+| Calendario Agentes | `/administrador/calendario/calendario-agentes` | CalendarSync | Agent-specific calendar |
+| Configuración | `/administrador/configuracion` | Settings | Platform settings |
+
+<Note>
+  The **Casos** and **Transferencia** entries are collapsible navigation groups with child items. The **Calendario** entry is likewise a group with two children. All other entries are direct links.
+</Note>
+
+## Dashboard Summary Tab
+
+The main "Resumen General" tab (`activeTab === 0`) renders four panels:
+
+<CardGroup cols={2}>
+  <Card title="Quick Metrics" icon="chart-bar">
+    Four KPI cards: Tasa de Ocupación, Visitas Programadas, Tiempo Promedio Venta, and Leads Nuevos—each with a trend indicator.
+  </Card>
+  <Card title="Recent Activity" icon="activity">
+    A live feed of the last five platform events (property published, client registered, sale closed, visit scheduled).
+  </Card>
+  <Card title="User Distribution" icon="chart-pie">
+    A Recharts `PieChart` showing the split between Administradores, Agentes, and Clientes using `total_*` values from the API.
+  </Card>
+  <Card title="Top Agents" icon="trophy">
+    A ranked list of top-performing agents with a `LinearProgress` bar representing their sales count relative to the highest performer.
+  </Card>
+</CardGroup>
+
+A bar chart at the bottom of the tab displays **Propiedades por Tipo** (Casas, Apartamentos, Oficinas, Terrenos, Locales).
+
+## Users Section
+
+The **Usuarios** view (`/administrador/usuarios`) renders `UserView`, which provides:
+
+- A paginated `UserTable` (10 rows per page by default) with toggle-status capability via `handleToggleStatus`.
+- `UserFilters` component for role, status, and search-term filtering.
+- **Nuevo Usuario** button that opens `NewUserModal` for creating new platform accounts.
+- **Export PDF** — generates a PDF via `@react-pdf/renderer` and triggers a download.
+- **Export Excel** — calls `exportUsersToExcel` utility and downloads an `.xlsx` file.
+
+## Properties Section
+
+The **Propiedades** view (`/administrador/propiedades`) renders `PropiedadesView`, which:
+
+- Fetches all property data via `getPropertiesFullDataAdmin(token)` on mount.
+- Displays properties in a responsive 3-column card grid.
+- Each card shows status badge (`Disponible` / `No Disponible` / `Vendida`), category badge, image, key attributes (bedrooms, bathrooms, built area, land area), and price.
+- Three action buttons per card: **View Details** (links to `/administrador/detalles-propiedad/:id`), **Delete** (`DeletePropertyById` modal), and **Update Status** (`UpdatePropertyStatusModal`).
+- **Publicar propiedad** button opens `PublishModal` for creating new listings.
+
+## CRM Cases Sections
+
+All three case sub-sections use the same tab-and-card layout powered by `RequestTabs` and `RequestCard` components:
+
+<Tabs>
+  <Tab title="Anonymous Cases">
+    **Route:** `/administrador/casos/anonimos`  
+    **Component:** `CasosView` (`lead-anonymous.view.tsx`)  
+    **Data source:** `useCRMRequests` hook → `GET /mostrar-leads-anonimos`  
+
+    Lists all anonymous leads across the platform. Tabs: Todos / Nuevos / En Proceso / Resueltos / Visto. Search filters by `code`.
+  </Tab>
+  <Tab title="CRM Solicitudes">
+    **Route:** `/administrador/casos/crm`  
+    **Component:** `CasesCRMView` (`lead-crm.view.tsx`)  
+    **Data source:** `useCRMRequests` hook  
+
+    Lists registered-client CRM leads. Identical tab structure to the anonymous view. Admins can view, sort, filter by status/priority, and export.
+  </Tab>
+  <Tab title="Agent Cases">
+    **Route:** `/administrador/casos/agentes-casos`  
+    **Component:** `LeadAgenteView` (`lead-agente.view.tsx`)  
+    **Data source:** `useAgentsForLeads` hook → `GET /mostrar-solicitudes-agente`  
+
+    Groups leads by agent. Each agent is displayed as a card in `AgenteGrid`. Clicking **Ver Solicitudes** on an agent opens `AgenteModal` with their full lead list.
+  </Tab>
+</Tabs>
+
+## Case Transfer
+
+**Route:** `/administrador/transferencia/tranferir-caso`  
+**Component:** `TransferAgentCase` (`lead-transfer-agent.view.tsx`)
+
+Allows administrators to reassign any anonymous case from one agent to another. See [Agent Case Transfer](/features/crm/agent-case-transfer) for the complete workflow.
+
+## Role Guard
+
+The Administrator Dashboard is protected at the router level. Only authenticated sessions with `role === "Administrador"` can access any `/administrador/*` route. The `navigationConfig` items for this role are:
+
+```typescript
+{
+  label: "Usuarios",
+  path:  "/administrador/usuarios",
+  roles: ["Administrador"],
+}
+```
+
+All entries carry `roles: ['Administrador']`, and the sidebar navigation renderer filters items against the authenticated user's role at runtime.
+
+<Warning>
+  The dashboard panel notes that some sections are still in active development. The `/administrador/reportes` and calendar routes display placeholder content. Live data is confirmed dynamic for all KPI cards, the user distribution chart, the Users table, Properties grid, and all CRM case views.
+</Warning>

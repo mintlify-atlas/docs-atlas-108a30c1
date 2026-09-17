@@ -1,0 +1,222 @@
+---
+title: "Analytics Reports Dashboard for Real Estate Admins"
+sidebarTitle: "Analytics Reports"
+description: "Admin-only reporting dashboard covering properties, users, leads, agent performance, and PDF/Excel export in Metrica Bienes Raices."
+---
+
+The Reports module gives administrators a comprehensive view of business performance across configurable time ranges. The dashboard — located at `/administrador/reportes` — surfaces four headline KPIs, two chart datasets, and a detailed per-agent performance table. Reports can be exported as a styled PDF using `@react-pdf/renderer` or as an Excel workbook via `xlsx-js-style`.
+
+## Access & Authentication
+
+<Note>
+  The reports endpoint is **admin-only**. Every request must include a valid `Authorization: Bearer <auth_token_mbr>` header. The frontend reads this token from the Redux `auth` slice (`state.auth.auth_token_mbr`).
+</Note>
+
+## Fetching Reports
+
+**`GET /admin-reports?range=:range`**
+
+```typescript
+import { getAdminReports } from "./get-report.service";
+
+const token = store.getState().auth.auth_token_mbr;
+const report = await getAdminReports("mes", token);
+
+if (report.success) {
+  console.log(report.data.stats.properties.total);
+}
+```
+
+### Range Parameter Values
+
+The `range` query parameter controls the time window for all statistics and chart data. The frontend ships these built-in options:
+
+| Value | Description |
+|---|---|
+| `hoy` | Today only |
+| `semana` | Current week |
+| `mes` | Current month (default in the UI) |
+| `trimestre` | Current quarter |
+| `año` | Current year |
+
+<Tip>
+  The exact date boundaries for each range value are computed server-side. Confirm with the backend team which day each range starts on (e.g., whether `semana` starts on Sunday or Monday) before building custom range selectors.
+</Tip>
+
+## Data Shape
+
+### `ReportResponse`
+
+The top-level envelope returned by `GET /admin-reports`.
+
+```typescript
+export interface ReportResponse {
+  success: boolean;
+  data: ReportData;
+  message?: string;
+}
+```
+
+### `ReportData`
+
+The main payload inside `data`.
+
+```typescript
+export interface ReportData {
+  period: ReportPeriod;
+  stats: ReportStats;
+  charts: {
+    leads_by_period: LeadsByPeriod[];
+    properties_by_status: PropertiesByStatus[];
+  };
+  agents_performance: AgentPerformance[];
+}
+```
+
+### `ReportPeriod`
+
+Describes the active time window for the current report.
+
+```typescript
+export interface ReportPeriod {
+  range: string;       // e.g. "mes"
+  start_date: string;  // e.g. "2025-06-01"
+  end_date: string;    // e.g. "2025-06-30"
+}
+```
+
+### `ReportStats`
+
+Four headline counters, each including a change indicator string returned by the backend.
+
+```typescript
+export interface ReportStat {
+  total: number;
+  change: string;   // e.g. "+12%", "-3", "Sin cambios"
+}
+
+export interface ReportStats {
+  properties: ReportStat;       // Total registered properties
+  new_users: ReportStat;        // New client accounts created
+  anonymous_leads: ReportStat;  // Inbound leads received
+  appointments: ReportStat;     // Calendar appointments held
+}
+```
+
+### Chart Data
+
+```typescript
+export interface LeadsByPeriod {
+  period: string;      // Date label, e.g. "2025-06-15"
+  total_leads: number;
+}
+
+export interface PropertiesByStatus {
+  status: string;  // e.g. "Disponible", "Vendido", "Arrendado"
+  total: number;
+}
+```
+
+The `leads_by_period` array is rendered as a bar chart in the UI. The `properties_by_status` array is displayed as a horizontal bar breakdown.
+
+### `AgentPerformance`
+
+Each entry in `agents_performance` represents one agent's activity summary for the selected period.
+
+```typescript
+export interface AgentPerformance {
+  id: number;
+  name: string;
+  leads: number;         // Total leads assigned
+  appointments: number;  // Calendar events held
+  conversions: number;   // Leads converted
+  conversion_rate: string; // e.g. "33.33%"
+}
+```
+
+## Dashboard Sections
+
+<CardGroup cols={2}>
+  <Card title="KPI Cards" icon="chart-bar">
+    Four stat cards display totals for **Propiedades registradas**, **Nuevos clientes**, **Leads recibidos**, and **Citas realizadas** — each with a change badge from the backend.
+  </Card>
+  <Card title="Leads by Period Chart" icon="chart-line">
+    A bar chart built from `charts.leads_by_period`. The most recent bar is highlighted in `#0d335a`; all prior bars use `#144c0b`.
+  </Card>
+  <Card title="Properties by Status" icon="chart-pie">
+    Horizontal progress bars for each property status in `charts.properties_by_status`, normalised against the highest total.
+  </Card>
+  <Card title="Agent Performance Table" icon="users">
+    A sortable table rendering all `agents_performance` rows with columns: Agent, Leads, Appointments, Conversions, and Conversion Rate.
+  </Card>
+</CardGroup>
+
+## Report Type Filter
+
+The UI exposes a secondary `reportType` selector alongside the range selector. This is a **client-side display filter** — it does not affect the API call but allows the user to focus on a particular section of the full report response:
+
+| Value | Shows |
+|---|---|
+| `general` | All sections |
+| `properties` | Properties KPI + status chart |
+| `agents` | Agent performance table |
+| `leads` | Leads KPI + leads-by-period chart |
+| `calendar` | Appointments KPI |
+
+## Exporting Reports
+
+### PDF Export
+
+PDF generation uses `@react-pdf/renderer`. Calling `generateAdminReportPDF()` produces a Blob in memory, converts it to an object URL, and triggers a browser download — no server round-trip required.
+
+```typescript
+import { generateAdminReportPDF } from "./generate-report-pdf.service";
+import { ReportData } from "../../types/reports/report.interface";
+
+// Assumes reportData is already fetched
+await generateAdminReportPDF(reportData);
+// Downloads: reporte-analitica-metrica-{start_date}-{end_date}.pdf
+```
+
+The file name is automatically derived from `reportData.period.start_date` and `reportData.period.end_date`.
+
+### Excel Export
+
+Excel workbooks are generated client-side via `xlsx-js-style`, which supports cell-level styling such as header background colors, bold fonts, and column widths. Import the library alongside the report data to build and download a `.xlsx` file.
+
+<Warning>
+  PDF and Excel exports are generated entirely in the browser. For large datasets (hundreds of agents or months of lead data) consider paginating the report or streaming the export server-side to avoid memory pressure.
+</Warning>
+
+## Full Service Call Example
+
+```typescript
+import { useEffect, useState } from "react";
+import { useAppSelector } from "../../../store/hooks";
+import { getAdminReports } from "../../../services/reports/get-report.service";
+import { generateAdminReportPDF } from "../../../services/reports/generate-report-pdf.service";
+import { ReportData } from "../../../types/reports/report.interface";
+
+function useAdminReport(range: string) {
+  const token = useAppSelector((state) => state.auth.auth_token_mbr);
+  const [reportData, setReportData] = useState<ReportData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!token) return;
+
+    setLoading(true);
+    getAdminReports(range, token)
+      .then((res) => {
+        if (res.success) setReportData(res.data);
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+  }, [range, token]);
+
+  const exportPDF = () => reportData && generateAdminReportPDF(reportData);
+
+  return { reportData, loading, error, exportPDF };
+}
+```

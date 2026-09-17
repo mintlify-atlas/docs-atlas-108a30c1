@@ -1,0 +1,219 @@
+---
+title: "Redux state management and persistence in Metrica Bienes Raices"
+sidebarTitle: "State Management"
+description: "Learn how Redux Toolkit, redux-persist, and the auth slice power Metrica Bienes Raices authentication state, token storage, and typed dispatch hooks."
+---
+
+Metrica Bienes Raices uses Redux Toolkit as its single state management layer, with redux-persist providing transparent serialisation of the auth state to `localStorage`. This page covers the store configuration, the `AuthState` shape, the `loginUser` and `logoutUser` async thunks, how the `auth_token_mbr` Bearer token is used in API calls, and the typed `useAppDispatch` / `useAppSelector` hooks that components use to interact with the store safely.
+
+## Store configuration
+
+The Redux store is configured in `src/store/index.ts`. Currently the store has a single slice — `auth` — wrapped in a redux-persist `persistReducer` so that the authenticated session survives page refreshes.
+
+```typescript
+// src/store/index.ts
+import { configureStore } from '@reduxjs/toolkit'
+import {
+  persistStore, persistReducer,
+  FLUSH, REHYDRATE, PAUSE, PERSIST, PURGE, REGISTER,
+} from 'redux-persist'
+import storage from 'redux-persist/lib/storage'  // defaults to localStorage
+import authReducer from '../features/auth/auth.slice'
+
+const authPersistConfig = {
+  key: 'auth',
+  storage,
+  // Only these fields are persisted — loading and error are intentionally excluded
+  whitelist: ['email', 'username', 'role', 'auth_token_mbr', 'active', 'isAuthenticated'],
+}
+
+const persistedAuthReducer = persistReducer(authPersistConfig, authReducer)
+
+export const store = configureStore({
+  reducer: {
+    auth: persistedAuthReducer,
+  },
+  middleware: (getDefaultMiddleware) =>
+    getDefaultMiddleware({
+      serializableCheck: {
+        // redux-persist dispatches non-serialisable internal actions — these must be ignored
+        ignoredActions: [FLUSH, REHYDRATE, PAUSE, PERSIST, PURGE, REGISTER],
+      },
+    }),
+})
+
+export const persistor = persistStore(store)
+export type RootState = ReturnType<typeof store.getState>
+export type AppDispatch = typeof store.dispatch
+```
+
+<Note>
+  The `whitelist` array deliberately excludes `loading` and `error` from persistence. When the app rehydrates on a page refresh, those transient fields start at their `initialState` defaults (`false` and `null` respectively) rather than carrying over stale error messages from a previous session.
+</Note>
+
+## Auth slice state shape
+
+The `auth` slice is defined in `src/features/auth/auth.slice.ts`. Its state interface represents everything the app needs to know about the currently logged-in user:
+
+```typescript
+// src/features/auth/auth.slice.ts
+interface AuthState {
+  email: string | null           // User's email address
+  username: string | null        // Display name / username
+  role: string | null            // 'Administrador' | 'Agente' | 'Cliente'
+  auth_token_mbr: string | null  // Bearer token for authenticated API requests
+  active: boolean                // Whether the account is active (not suspended)
+  isAuthenticated: boolean       // Primary auth gate used by PrivateRoute
+  loading: boolean               // True while a login/logout request is in-flight
+  error: any                     // Error payload from a rejected thunk, or null
+}
+```
+
+| Field | Persisted | Description |
+|---|---|---|
+| `email` | ✅ | User's email, shown in the sidebar profile area |
+| `username` | ✅ | User's display name |
+| `role` | ✅ | Controls route access and sidebar navigation filtering |
+| `auth_token_mbr` | ✅ | Bearer token attached to every protected API call |
+| `active` | ✅ | Inactive accounts are rejected by `loginUser` before the token is stored |
+| `isAuthenticated` | ✅ | The boolean flag `PrivateRoute` checks to gate all private routes |
+| `loading` | ❌ | Transient — reset to `false` on each app load |
+| `error` | ❌ | Transient — reset to `null` on each app load |
+
+## Async thunks
+
+Both authentication operations are implemented as `createAsyncThunk` actions in `src/features/auth/auth.thunks.ts`.
+
+### `loginUser`
+
+```typescript
+// src/features/auth/auth.thunks.ts
+export const loginUser = createAsyncThunk<AuthPayload, LoginCredentials>(
+  'auth/loginUser',
+  async (credentials, { rejectWithValue }) => {
+    try {
+      const result = await loginRequest(credentials)
+      const { user, auth_token_mbr } = result.data
+
+      // Suspended accounts are rejected before touching the store
+      if (!user.active) {
+        return rejectWithValue({ status: 403, message: 'Usuario desactivado' })
+      }
+
+      return {
+        email: user.email,
+        username: user.username,
+        role: user.role,
+        active: user.active,
+        auth_token_mbr,
+      }
+    } catch (error: any) {
+      return rejectWithValue({ status: error.status, message: error.message })
+    }
+  }
+)
+```
+
+The thunk calls `loginRequest` (a thin axios wrapper that posts to `REACT_APP_API_URL/auth/login`), validates that the returned account is active, and returns the normalised payload. The auth slice's `extraReducers` handle the three lifecycle cases:
+
+- **`pending`** → sets `loading: true`, clears `error`
+- **`fulfilled`** → writes all user fields, sets `isAuthenticated: true`, clears `loading`
+- **`rejected`** → stores the error payload, sets `isAuthenticated: false`, clears `loading`
+
+### `logoutUser`
+
+```typescript
+export const logoutUser = createAsyncThunk(
+  'auth/logoutUser',
+  async (_, { getState, rejectWithValue }) => {
+    try {
+      const state = getState() as RootState
+      const token = state.auth.auth_token_mbr
+
+      if (!token) throw new Error('No hay token disponible')
+
+      await logoutRequest(token)  // Calls the server-side logout endpoint
+      return true
+    } catch (error: any) {
+      return rejectWithValue(error.message)
+    }
+  }
+)
+```
+
+`logoutUser` retrieves the current `auth_token_mbr` directly from the store via `getState()` and passes it to `logoutRequest` to invalidate the session server-side. On `fulfilled`, the slice resets all fields back to their `null` / `false` initial values.
+
+<Warning>
+  Always dispatch `logoutUser` (the thunk) rather than the synchronous `logout` action when the user intentionally signs out. `logoutUser` calls the backend invalidation endpoint first. The synchronous `logout` action is a fallback for scenarios where you need to clear client state without a network call (e.g. detecting an expired token from an API 401 response).
+</Warning>
+
+## Using the Bearer token in API calls
+
+After a successful login, `auth_token_mbr` is stored in both the Redux state and `localStorage` (via redux-persist). Service functions retrieve it and attach it as an `Authorization: Bearer` header:
+
+```typescript
+// Example usage in a protected service (e.g. properties.service.ts)
+import { store } from '../../store'
+
+export const getProperties = () => {
+  const token = store.getState().auth.auth_token_mbr
+
+  return axios.get(`${process.env.REACT_APP_API_URL}/properties`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  })
+}
+```
+
+<Tip>
+  A common pattern in the codebase is to create an axios instance with an interceptor that automatically reads the token from the store and attaches the `Authorization` header to every outgoing request. This avoids repeating the header setup in every service function.
+</Tip>
+
+## Typed hooks
+
+`src/store/hooks.ts` exports two typed wrappers around the standard Redux hooks. Always use these instead of the untyped `useDispatch` and `useSelector` to get full TypeScript inference:
+
+```typescript
+// src/store/hooks.ts
+import { TypedUseSelectorHook, useDispatch, useSelector } from 'react-redux'
+import type { RootState, AppDispatch } from './index'
+
+// Use throughout the app instead of plain useDispatch
+export const useAppDispatch = () => useDispatch<AppDispatch>()
+
+// Use throughout the app instead of plain useSelector
+export const useAppSelector: TypedUseSelectorHook<RootState> = useSelector
+```
+
+### Usage in components
+
+```tsx
+import { useAppDispatch, useAppSelector } from '../store/hooks'
+import { loginUser, logoutUser } from '../features/auth/auth.thunks'
+
+function LoginButton() {
+  const dispatch = useAppDispatch()
+  const { loading, error, isAuthenticated } = useAppSelector((state) => state.auth)
+
+  const handleLogin = () => {
+    dispatch(loginUser({ email: 'user@example.com', password: 'secret' }))
+  }
+
+  const handleLogout = () => {
+    dispatch(logoutUser())
+  }
+
+  return (
+    <>
+      {!isAuthenticated
+        ? <button onClick={handleLogin} disabled={loading}>Iniciar Sesión</button>
+        : <button onClick={handleLogout}>Cerrar Sesión</button>
+      }
+      {error && <p>{error.message}</p>}
+    </>
+  )
+}
+```
+
+`useAppDispatch` types the dispatcher so that it accepts thunks (returning `AsyncThunkAction`) without TypeScript errors. `useAppSelector` provides full autocomplete on the `RootState` shape, including all fields of `AuthState`.

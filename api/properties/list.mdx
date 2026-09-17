@@ -1,0 +1,218 @@
+---
+title: "List All Properties — Metrica Bienes Raices API"
+sidebarTitle: "List Properties"
+description: "Fetch the full public catalog of properties. Returns an array of PropertyGetData objects with pricing, specs, and a primary image URL."
+---
+
+The **List Properties** endpoint exposes the complete public property catalog without requiring any form of authentication. Use it to populate listing pages, property grids, and search results on the client-facing side of the application. Each item in the returned `data` array contains the essential display fields defined in the `PropertyGetData` interface, including a pre-resolved `full_address` and the URL for the property's primary image.
+
+## Endpoint
+
+```
+GET /todas-propiedades
+```
+
+**Base URL:** `REACT_APP_API_URL` (configured via environment variable)
+
+**Authentication:** None — this is a fully public endpoint.
+
+## Response
+
+The endpoint always returns a JSON envelope with a `success` flag, a human-readable `message`, and the `data` array.
+
+### Top-level envelope
+
+<ResponseField name="success" type="boolean" required>
+  `true` when the request was processed correctly, `false` on server-side errors.
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  A descriptive status message, e.g. `"Propiedades obtenidas correctamente"`.
+</ResponseField>
+
+<ResponseField name="data" type="PropertyGetData[]" required>
+  Array of property objects. Empty array `[]` when no properties exist.
+
+  <Expandable title="PropertyGetData fields">
+    <ResponseField name="id" type="number" required>
+      Unique numeric identifier for the property.
+    </ResponseField>
+
+    <ResponseField name="title" type="string" required>
+      Property listing title as entered by the administrator.
+    </ResponseField>
+
+    <ResponseField name="price" type="string" required>
+      Listing price as a decimal string (e.g. `"450000000.00"`). Parse with `parseFloat()` before formatting as currency.
+    </ResponseField>
+
+    <ResponseField name="type_standar" type="string" required>
+      Transaction type. Typical values: `"Venta"`, `"Arriendo"`.
+    </ResponseField>
+
+    <ResponseField name="category" type="string" required>
+      Top-level category, e.g. `"Espacios Para Vivir"`, `"Inversión Inteligente"`, `"Patrimonio Campestre"`.
+    </ResponseField>
+
+    <ResponseField name="subcategory" type="string" required>
+      Subcategory within the parent category, e.g. `"Apartamentos"`, `"Casas"`, `"Fincas"`.
+    </ResponseField>
+
+    <ResponseField name="bedrooms" type="number" required>
+      Number of bedrooms.
+    </ResponseField>
+
+    <ResponseField name="bathrooms" type="number" required>
+      Number of bathrooms.
+    </ResponseField>
+
+    <ResponseField name="garages" type="number" required>
+      Number of garage spaces.
+    </ResponseField>
+
+    <ResponseField name="built_area" type="string" required>
+      Built area in square meters as a decimal string, e.g. `"120.00"`.
+    </ResponseField>
+
+    <ResponseField name="land_area" type="string" required>
+      Total land area in square meters as a decimal string, e.g. `"200.00"`.
+    </ResponseField>
+
+    <ResponseField name="full_address" type="string" required>
+      Human-readable full address resolved by the backend (address + city).
+    </ResponseField>
+
+    <ResponseField name="image" type="string" required>
+      Absolute URL of the property's primary display image. May be an empty string if no image has been uploaded.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Examples
+
+### cURL
+
+```bash
+curl --request GET \
+  --url "${REACT_APP_API_URL}/todas-propiedades" \
+  --header "Accept: application/json"
+```
+
+### TypeScript (fetch)
+
+```typescript
+import { PropertyResponse } from "./types/properties/property-data.interface";
+
+const BASE_URL = process.env.REACT_APP_API_URL;
+
+export const getProperties = async (): Promise<PropertyResponse> => {
+  const response = await fetch(`${BASE_URL}/todas-propiedades`);
+
+  const result: PropertyResponse = await response.json();
+
+  if (!response.ok || !result.success) {
+    throw new Error(result.message || "Error al obtener propiedades");
+  }
+
+  return result;
+};
+```
+
+### Sample response
+
+```json
+{
+  "success": true,
+  "message": "Propiedades obtenidas correctamente",
+  "data": [
+    {
+      "id": 14,
+      "title": "Apartamento moderno en Laureles",
+      "price": "320000000.00",
+      "type_standar": "Venta",
+      "category": "Espacios Para Vivir",
+      "subcategory": "Apartamentos",
+      "bedrooms": 3,
+      "bathrooms": 2,
+      "garages": 1,
+      "built_area": "98.00",
+      "land_area": "98.00",
+      "full_address": "Calle 33 # 74-12, Medellín",
+      "image": "https://cdn.example.com/properties/14/main.webp"
+    }
+  ]
+}
+```
+
+## Get a Single Property by ID
+
+To retrieve the full detail of one public property use the `/propiedad/:id` endpoint.
+
+```
+GET /propiedad/:id
+```
+
+```bash
+curl --request GET \
+  --url "${REACT_APP_API_URL}/propiedad/14" \
+  --header "Accept: application/json"
+```
+
+```typescript
+export async function getPropertyById(id: string): Promise<PropertyResponse> {
+  const response = await fetch(`${BASE_URL}/propiedad/${id}`);
+
+  const data: PropertyResponse = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.message || "Error obteniendo propiedad");
+  }
+
+  return data;
+}
+```
+
+## Admin — List All Properties (Full Data)
+
+Administrators can retrieve the full dataset for all properties, including status, audit timestamps, and related user data.
+
+```
+GET /admin-listar-propiedades
+```
+
+<Note>
+  This endpoint requires a valid Bearer token with **Administrator** role. The response envelope's `data` array contains `Property` objects with extended fields such as `status`, `image` (as `PropertyImage | null`), and audit metadata.
+</Note>
+
+```bash
+curl --request GET \
+  --url "${REACT_APP_API_URL}/admin-listar-propiedades" \
+  --header "Authorization: Bearer <token>" \
+  --header "Content-Type: application/json"
+```
+
+### Admin — Get Property by ID
+
+```
+GET /admin-listar-propiedad/:id
+```
+
+```bash
+curl --request GET \
+  --url "${REACT_APP_API_URL}/admin-listar-propiedad/14" \
+  --header "Authorization: Bearer <token>" \
+  --header "Content-Type: application/json"
+```
+
+The response `data` object conforms to `PropertyDetailId` which extends `AdminPropertyDetails` with description, images array, user reference, and full audit timestamps.
+
+## Error Handling
+
+| HTTP Status | Meaning |
+|-------------|---------|
+| `200` | Success — `data` array returned (may be empty). |
+| `500` | Server error — inspect `message` for details. |
+
+<Tip>
+  Cache the result of this endpoint on the client side using Redux Toolkit's `createAsyncThunk` to avoid redundant network requests during navigation between list and detail views.
+</Tip>

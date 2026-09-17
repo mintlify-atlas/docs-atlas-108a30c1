@@ -1,0 +1,243 @@
+---
+title: "Create a Client Lead — Metrica Bienes Raices API"
+sidebarTitle: "Create Lead"
+description: "Submit a new lead from an authenticated client, assigning it to an agent and a property. Also covers the PATCH endpoint to update lead status."
+---
+
+The **Create Lead** endpoint allows an authenticated client to submit a new lead request on the Metrica Bienes Raices platform. A lead links a client to a specific property and assigns an agent responsible for following up. The payload must include the target agent, the property of interest, the type of inquiry, and an optional note. Authentication via Bearer token is required, and the token must correspond to a user with the **Client** role.
+
+## Endpoint
+
+```
+POST /client-crear-lead
+```
+
+**Authentication:** `Authorization: Bearer <token>` — Client role required.
+
+**Content-Type:** `application/json`
+
+## Request body
+
+<ParamField body="agent_id" type="number" required>
+  The numeric ID of the agent who will be assigned to handle this lead. Must correspond to a valid agent user in the system.
+</ParamField>
+
+<ParamField body="property_id" type="number" required>
+  The numeric ID of the property the client is interested in. Must correspond to an existing, active property listing.
+</ParamField>
+
+<ParamField body="type" type="string" required>
+  The type of inquiry the client is making. Examples: `"Compra"`, `"Arriendo"`, `"Información General"`, `"Visita"`.
+</ParamField>
+
+<ParamField body="note" type="string" required>
+  A free-text note from the client describing their interest or specific questions. Can be an empty string but the field must be present.
+</ParamField>
+
+## Response
+
+<ResponseField name="success" type="boolean" required>
+  `true` when the lead was created successfully.
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  Human-readable outcome message.
+</ResponseField>
+
+<ResponseField name="data" type="any">
+  Lead data returned on success. Shape may vary — see the backend implementation for the exact structure.
+</ResponseField>
+
+<ResponseField name="errors" type="any">
+  Validation errors object returned when the request fails with a `422` status.
+</ResponseField>
+
+## TypeScript interface
+
+```typescript
+export interface CreateLeadPayload {
+  agent_id: number;
+  property_id: number;
+  type: string;
+  note: string;
+}
+
+export interface CreateLeadResponse {
+  success: boolean;
+  message: string;
+  data?: any;
+  errors?: any;
+}
+```
+
+## Examples
+
+### cURL
+
+```bash
+curl --request POST \
+  --url "${REACT_APP_API_URL}/client-crear-lead" \
+  --header "Authorization: Bearer <token>" \
+  --header "Content-Type: application/json" \
+  --header "Accept: application/json" \
+  --data '{
+    "agent_id": 5,
+    "property_id": 14,
+    "type": "Compra",
+    "note": "Me interesa conocer más sobre la propiedad, ¿hay disponibilidad para una visita este fin de semana?"
+  }'
+```
+
+### TypeScript (fetch)
+
+```typescript
+import {
+  CreateLeadPayload,
+  CreateLeadResponse,
+} from "./types/leads/leads.interface";
+
+const BASE_URL = process.env.REACT_APP_API_URL;
+
+export const createLead = async (
+  payload: CreateLeadPayload,
+  token: string
+): Promise<CreateLeadResponse> => {
+  const response = await fetch(`${BASE_URL}/client-crear-lead`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    const error = new Error(
+      data?.message || data?.error || "Error al crear el lead"
+    );
+    (error as any).status = response.status;
+    (error as any).data = data;
+    throw error;
+  }
+
+  return data;
+};
+```
+
+### Sample response
+
+```json
+{
+  "success": true,
+  "message": "Lead creado exitosamente",
+  "data": {
+    "id": 88,
+    "agent_id": 5,
+    "property_id": 14,
+    "type": "Compra",
+    "note": "Me interesa conocer más sobre la propiedad...",
+    "status": "Nuevo"
+  }
+}
+```
+
+<Note>
+  The thrown `Error` object is enriched with `.status` (HTTP status code) and `.data` (the raw response body). Inspect these in your Redux `createAsyncThunk` `rejected` case to display context-sensitive error messages.
+</Note>
+
+---
+
+## Update Lead Status
+
+```
+PATCH /change-status-anonymous-leads-view-details/:id
+```
+
+**Authentication:** `Authorization: Bearer <token>` — Agent or Administrator role required.
+
+**Content-Type:** `application/json`
+
+Updates the status of an existing lead. Agents use this endpoint to progress a lead through the workflow, e.g., from `"Nuevo"` → `"En Proceso"` → `"Cerrado"`.
+
+### Path parameters
+
+<ParamField path="id" type="number" required>
+  The numeric ID of the lead whose status should be updated.
+</ParamField>
+
+### Request body
+
+<ParamField body="status" type="string" required>
+  The new status value for the lead. Common values include `"Nuevo"`, `"En Proceso"`, `"Contactado"`, `"Cerrado"`, `"Descartado"`. The accepted set of values is determined by the backend.
+</ParamField>
+
+### cURL example
+
+```bash
+curl --request PATCH \
+  --url "${REACT_APP_API_URL}/change-status-anonymous-leads-view-details/88" \
+  --header "Authorization: Bearer <token>" \
+  --header "Content-Type: application/json" \
+  --header "Accept: application/json" \
+  --data '{ "status": "En Proceso" }'
+```
+
+### TypeScript example
+
+```typescript
+const BASE_URL = process.env.REACT_APP_API_URL;
+
+export const updateStatusAnonymousLead = async (
+  id: number,
+  status: string,
+  token: string
+) => {
+  const response = await fetch(
+    `${BASE_URL}/change-status-anonymous-leads-view-details/${id}`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        accept: "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ status }),
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data?.message || "Error al actualizar estado");
+  }
+
+  return data;
+};
+```
+
+### Sample response
+
+```json
+{
+  "success": true,
+  "message": "Estado del lead actualizado correctamente",
+  "data": {
+    "id": 88,
+    "status": "En Proceso"
+  }
+}
+```
+
+## Error handling
+
+| HTTP Status | Meaning |
+|-------------|---------|
+| `200` / `201` | Lead created or status updated successfully. |
+| `401` | Missing or invalid Bearer token. |
+| `403` | Token role is not Client (for create) or not Agent/Admin (for status update). |
+| `404` | Lead or property/agent not found. |
+| `422` | Validation error — inspect `errors` field for per-field messages. |
+| `500` | Internal server error. |

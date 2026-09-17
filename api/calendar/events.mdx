@@ -1,0 +1,570 @@
+---
+title: "Calendar Events — Create, List, Update, and Delete"
+sidebarTitle: "Calendar Events"
+description: "Full CRUD for calendar events: create appointments linked to clients, leads, and properties; list, change status, update, and delete events. Bearer token required."
+---
+
+The **Calendar Events** API powers the scheduling module within the Metrica Bienes Raices platform. Agents and administrators can create calendar appointments that are optionally associated with a client, a lead, and a specific property. Events support a color field for visual differentiation in the calendar UI, an `all_day` flag, and a lifecycle status that tracks the appointment from `"Pendiente"` through to `"Completado"`. All endpoints derive the Bearer token automatically from the Redux store via the shared `headers()` helper in `calendar-api.config.ts`.
+
+## Authentication
+
+All calendar endpoints require a Bearer token. The `headers()` function reads the token from the Redux `auth` slice:
+
+```typescript
+// src/services/calendar/calendar-api.config.ts
+import store from "../../store";
+
+export const getToken = () => {
+  const state = store.getState();
+  return state.auth.auth_token_mbr;
+};
+
+export const headers = () => ({
+  "Content-Type": "application/json",
+  Authorization: `Bearer ${getToken()}`,
+});
+
+const API_URL = process.env.REACT_APP_API_URL;
+export default API_URL;
+```
+
+Pass this header object directly in every fetch call: `headers: headers()`.
+
+## Event status values
+
+The `EventStatus` type constrains the lifecycle of a calendar event:
+
+```typescript
+export type EventStatus =
+  | "Pendiente"    // Awaiting confirmation
+  | "Confirmado"   // Confirmed by the agent/admin
+  | "Cancelado"    // Cancelled
+  | "Completado";  // The appointment has taken place
+```
+
+## `CreateCalendarEvent` interface
+
+```typescript
+export interface CreateCalendarEvent {
+  title: string;
+  description?: string;
+  start_date: string;        // ISO 8601, e.g. "2024-08-01T10:00:00Z"
+  end_date: string;          // ISO 8601, e.g. "2024-08-01T11:00:00Z"
+  location?: string;
+  color?: string;            // CSS hex or named color, e.g. "#4CAF50"
+  all_day?: boolean;
+  status: EventStatus;
+  client_id: number | null;
+  lead_id: number | null;
+  property_id: number | null;
+}
+```
+
+---
+
+## 1. Create Calendar Event
+
+```
+POST /calendar-events
+```
+
+**Authentication:** Bearer token via `headers()`.
+
+**Content-Type:** `application/json`
+
+Creates a new calendar event for the authenticated user. Link the event to a client, a lead, and/or a property by supplying their IDs. Pass `null` for any optional association fields you do not want to set.
+
+### Request body
+
+<ParamField body="title" type="string" required>
+  Short title for the event displayed in the calendar grid, e.g. `"Visita propiedad Laureles"`.
+</ParamField>
+
+<ParamField body="description" type="string">
+  Optional longer description with additional context about the appointment.
+</ParamField>
+
+<ParamField body="start_date" type="string" required>
+  ISO 8601 start date and time, e.g. `"2024-08-01T10:00:00Z"`. When `all_day` is `true`, the time component is ignored.
+</ParamField>
+
+<ParamField body="end_date" type="string" required>
+  ISO 8601 end date and time. Must be after `start_date`.
+</ParamField>
+
+<ParamField body="location" type="string">
+  Optional location string — may be a physical address or a virtual meeting link.
+</ParamField>
+
+<ParamField body="color" type="string">
+  CSS color for the event chip in the calendar UI, e.g. `"#4CAF50"`, `"#1976D2"`. Defaults to a system color if omitted.
+</ParamField>
+
+<ParamField body="all_day" type="boolean">
+  `true` to mark the event as an all-day event. Defaults to `false`.
+</ParamField>
+
+<ParamField body="status" type="string" required>
+  Initial event status. Must be one of `"Pendiente"`, `"Confirmado"`, `"Cancelado"`, `"Completado"`.
+</ParamField>
+
+<ParamField body="client_id" type="number | null" required>
+  ID of the client associated with this event. Pass `null` if no client is linked.
+</ParamField>
+
+<ParamField body="lead_id" type="number | null" required>
+  ID of the lead associated with this event. Pass `null` if no lead is linked.
+</ParamField>
+
+<ParamField body="property_id" type="number | null" required>
+  ID of the property associated with this event. Pass `null` if no property is linked.
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  `true` on successful creation.
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  Outcome message.
+</ResponseField>
+
+<ResponseField name="data" type="CalendarEvent" required>
+  The created event object.
+
+  <Expandable title="CalendarEvent fields">
+    <ResponseField name="id" type="number">Unique event ID.</ResponseField>
+    <ResponseField name="user_id" type="number">ID of the user who owns this event.</ResponseField>
+    <ResponseField name="title" type="string">Event title.</ResponseField>
+    <ResponseField name="description" type="string">Event description.</ResponseField>
+    <ResponseField name="start_date" type="string">ISO 8601 start timestamp.</ResponseField>
+    <ResponseField name="end_date" type="string">ISO 8601 end timestamp.</ResponseField>
+    <ResponseField name="location" type="string">Event location.</ResponseField>
+    <ResponseField name="color" type="string">Assigned color.</ResponseField>
+    <ResponseField name="all_day" type="boolean">Whether the event spans a full day.</ResponseField>
+    <ResponseField name="status" type="string">Current event status.</ResponseField>
+    <ResponseField name="client_id" type="number | undefined">Linked client ID.</ResponseField>
+    <ResponseField name="property_id" type="number | undefined">Linked property ID.</ResponseField>
+    <ResponseField name="client" type="object">Expanded client object, if linked.</ResponseField>
+    <ResponseField name="lead" type="object">Expanded lead object, if linked.</ResponseField>
+    <ResponseField name="property" type="object">Expanded property object, if linked.</ResponseField>
+    <ResponseField name="created_at" type="string">ISO 8601 creation timestamp.</ResponseField>
+    <ResponseField name="updated_at" type="string">ISO 8601 last-updated timestamp.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+### cURL example
+
+```bash
+curl --request POST \
+  --url "${REACT_APP_API_URL}/calendar-events" \
+  --header "Authorization: Bearer <token>" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "title": "Visita propiedad Laureles",
+    "description": "Primera visita al apartamento con el cliente",
+    "start_date": "2024-08-01T10:00:00Z",
+    "end_date": "2024-08-01T11:00:00Z",
+    "location": "Calle 33 # 74-12, Medellín",
+    "color": "#4CAF50",
+    "all_day": false,
+    "status": "Pendiente",
+    "client_id": 12,
+    "lead_id": 88,
+    "property_id": 14
+  }'
+```
+
+### TypeScript example
+
+```typescript
+import {
+  CalendarEventResponse,
+  CreateCalendarEvent,
+} from "./types/calendar/calendar-event.interface";
+import API_URL, { headers } from "./calendar-api.config";
+
+export const createCalendarEvent = async (
+  event: CreateCalendarEvent
+): Promise<CalendarEventResponse> => {
+  const response = await fetch(`${API_URL}/calendar-events`, {
+    method: "POST",
+    headers: headers(),
+    body: JSON.stringify(event),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.message);
+  }
+
+  return data;
+};
+```
+
+---
+
+## 2. List Calendar Events
+
+```
+GET /calendar-events
+```
+
+**Authentication:** Bearer token via `headers()`.
+
+Returns all calendar events for the currently authenticated user. The response may include a `user` object and a `total_events` count alongside the `data` array.
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  `true` when events were retrieved successfully.
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  Outcome message.
+</ResponseField>
+
+<ResponseField name="user" type="object">
+  Brief user object for the authenticated user.
+
+  <Expandable title="user fields">
+    <ResponseField name="id" type="number">User ID.</ResponseField>
+    <ResponseField name="username" type="string">Username.</ResponseField>
+    <ResponseField name="email" type="string">Email address.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="total_events" type="number">
+  Total number of events returned.
+</ResponseField>
+
+<ResponseField name="data" type="CalendarEvent[]" required>
+  Array of calendar event objects. See the `CalendarEvent` field descriptions above.
+</ResponseField>
+
+### cURL example
+
+```bash
+curl --request GET \
+  --url "${REACT_APP_API_URL}/calendar-events" \
+  --header "Authorization: Bearer <token>" \
+  --header "Content-Type: application/json"
+```
+
+### TypeScript example
+
+```typescript
+import { CalendarEventResponse } from "./types/calendar/calendar-event.interface";
+import API_URL, { headers } from "./calendar-api.config";
+
+export const getCalendarEvents = async (): Promise<CalendarEventResponse> => {
+  const response = await fetch(`${API_URL}/calendar-events`, {
+    method: "GET",
+    headers: headers(),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.message);
+  }
+
+  return data;
+};
+```
+
+### Sample response
+
+```json
+{
+  "success": true,
+  "message": "Eventos obtenidos correctamente",
+  "user": { "id": 5, "username": "agente01", "email": "agente@metrica.com" },
+  "total_events": 2,
+  "data": [
+    {
+      "id": 33,
+      "user_id": 5,
+      "title": "Visita propiedad Laureles",
+      "start_date": "2024-08-01T10:00:00Z",
+      "end_date": "2024-08-01T11:00:00Z",
+      "color": "#4CAF50",
+      "all_day": false,
+      "status": "Pendiente",
+      "client_id": 12,
+      "property_id": 14,
+      "created_at": "2024-07-28T09:00:00Z",
+      "updated_at": "2024-07-28T09:00:00Z"
+    }
+  ]
+}
+```
+
+---
+
+## 3. Update Calendar Event
+
+```
+PUT /calendar-events/:id
+```
+
+**Authentication:** Bearer token via `headers()`.
+
+**Content-Type:** `application/json`
+
+Performs a full or partial update on an existing event. The payload accepts a `Partial<CreateCalendarEvent>`, so only the fields you wish to change need to be included.
+
+### Path parameters
+
+<ParamField path="id" type="number" required>
+  Numeric ID of the event to update.
+</ParamField>
+
+### Request body
+
+Any subset of `CreateCalendarEvent` fields. Omitted fields remain unchanged.
+
+### cURL example
+
+```bash
+curl --request PUT \
+  --url "${REACT_APP_API_URL}/calendar-events/33" \
+  --header "Authorization: Bearer <token>" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "title": "Visita confirmada — Laureles",
+    "status": "Confirmado",
+    "color": "#1976D2"
+  }'
+```
+
+### TypeScript example
+
+```typescript
+import {
+  CalendarEventResponse,
+  CreateCalendarEvent,
+} from "./types/calendar/calendar-event.interface";
+import API_URL, { headers } from "./calendar-api.config";
+
+export const updateCalendarEvent = async (
+  id: number,
+  event: Partial<CreateCalendarEvent>
+): Promise<CalendarEventResponse> => {
+  const response = await fetch(`${API_URL}/calendar-events/${id}`, {
+    method: "PUT",
+    headers: headers(),
+    body: JSON.stringify(event),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.message);
+  }
+
+  return data;
+};
+```
+
+---
+
+## 4. Change Event Status
+
+```
+PATCH /event/actualizar-estado/:id
+```
+
+**Authentication:** `Authorization: Bearer <token>` (token passed explicitly, not via `headers()` helper).
+
+**Content-Type:** `application/json`
+
+Transitions an event to a new lifecycle status without modifying any other fields. Use this when the agent confirms, cancels, or completes an appointment.
+
+### Path parameters
+
+<ParamField path="id" type="number" required>
+  Numeric ID of the event to update.
+</ParamField>
+
+### Request body
+
+<ParamField body="status" type="string" required>
+  New event status. Must be one of `"Pendiente"`, `"Confirmado"`, `"Cancelado"`, `"Completado"`.
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  `true` on successful status change.
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  Human-readable outcome message.
+</ResponseField>
+
+<ResponseField name="status" type="string" required>
+  The new `EventStatus` value that was applied.
+</ResponseField>
+
+### TypeScript interfaces
+
+```typescript
+export type EventStatus =
+  | "Pendiente"
+  | "Confirmado"
+  | "Cancelado"
+  | "Completado";
+
+export interface ChangeStatusEventRequest {
+  status: EventStatus;
+}
+
+export interface ChangeStatusEventResponse {
+  success: boolean;
+  message: string;
+  status: EventStatus;
+}
+```
+
+### cURL example
+
+```bash
+curl --request PATCH \
+  --url "${REACT_APP_API_URL}/event/actualizar-estado/33" \
+  --header "Authorization: Bearer <token>" \
+  --header "Content-Type: application/json" \
+  --header "Accept: application/json" \
+  --data '{ "status": "Confirmado" }'
+```
+
+### TypeScript example
+
+```typescript
+import {
+  ChangeStatusEventRequest,
+  ChangeStatusEventResponse,
+} from "./types/calendar/change-status-event.interface";
+
+export const changeStatusEventService = async (
+  id: number,
+  body: ChangeStatusEventRequest,
+  token: string
+): Promise<ChangeStatusEventResponse> => {
+  const response = await fetch(
+    `${process.env.REACT_APP_API_URL}/event/actualizar-estado/${id}`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(body),
+    }
+  );
+
+  const data: ChangeStatusEventResponse = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.message);
+  }
+
+  return data;
+};
+```
+
+### Sample response
+
+```json
+{
+  "success": true,
+  "message": "Estado del evento actualizado correctamente",
+  "status": "Confirmado"
+}
+```
+
+---
+
+## 5. Delete Calendar Event
+
+```
+DELETE /calendar-events/:id
+```
+
+**Authentication:** Bearer token via `headers()`.
+
+Permanently deletes a calendar event. This action cannot be undone.
+
+<Warning>
+  Deleting a calendar event is irreversible. If the event is linked to a lead or client follow-up, ensure the team is notified before removal.
+</Warning>
+
+### Path parameters
+
+<ParamField path="id" type="number" required>
+  Numeric ID of the event to delete.
+</ParamField>
+
+### cURL example
+
+```bash
+curl --request DELETE \
+  --url "${REACT_APP_API_URL}/calendar-events/33" \
+  --header "Authorization: Bearer <token>" \
+  --header "Content-Type: application/json"
+```
+
+### TypeScript example
+
+```typescript
+import { CalendarEventResponse } from "./types/calendar/calendar-event.interface";
+import API_URL, { headers } from "./calendar-api.config";
+
+export const deleteCalendarEvent = async (
+  id: number
+): Promise<CalendarEventResponse> => {
+  const response = await fetch(`${API_URL}/calendar-events/${id}`, {
+    method: "DELETE",
+    headers: headers(),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.message);
+  }
+
+  return data;
+};
+```
+
+### Sample response
+
+```json
+{
+  "success": true,
+  "message": "Evento eliminado exitosamente",
+  "data": { "id": 33 }
+}
+```
+
+---
+
+## Error handling (all calendar endpoints)
+
+| HTTP Status | Meaning |
+|-------------|---------|
+| `200` / `201` | Request completed successfully. |
+| `400` | Bad request — invalid `status` value or malformed date range. |
+| `401` | Missing or expired Bearer token. |
+| `403` | Insufficient permissions for the requested operation. |
+| `404` | No event found for the given ID. |
+| `422` | Validation error on request body. |
+| `500` | Internal server error. |
+
+<Tip>
+  The `color` field accepts any valid CSS color string. Use a consistent palette across your React components — for example, map `"Pendiente"` to `"#FFA726"` (orange), `"Confirmado"` to `"#4CAF50"` (green), `"Cancelado"` to `"#EF5350"` (red), and `"Completado"` to `"#1976D2"` (blue) — to give agents an instant visual status overview in the calendar grid.
+</Tip>

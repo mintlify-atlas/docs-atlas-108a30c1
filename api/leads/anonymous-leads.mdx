@@ -1,0 +1,386 @@
+---
+title: "Anonymous Leads — Submit and Retrieve Unauthenticated Leads"
+sidebarTitle: "Anonymous Leads"
+description: "Create leads from unauthenticated visitors and retrieve stored anonymous leads for admin review. No login required to submit; Bearer token needed to list."
+---
+
+Anonymous leads allow website visitors who have not registered or logged in to express interest in a property and request contact from an agent. This is a critical top-of-funnel capture mechanism — it removes the authentication barrier that would otherwise prevent potential buyers or renters from reaching the sales team. Once an anonymous lead is created, it is stored with a unique `code` that the visitor can use to track their inquiry. Administrators and agents can then retrieve all anonymous leads through the authenticated list endpoint and assign them for follow-up.
+
+## When to use anonymous leads vs. registered leads
+
+| Scenario | Endpoint to use |
+|----------|-----------------|
+| A visitor is browsing the public listing and fills in a contact form without an account. | `POST /crear-lead` (anonymous) |
+| A registered client with an active session submits an inquiry from their dashboard. | `POST /client-crear-lead` (authenticated) |
+| An admin or agent wants to see all unauthenticated inquiries. | `GET /mostrar-leads-anonimos` (admin only) |
+
+<Note>
+  Anonymous leads capture more data about the visitor (full name, phone, email, interest message) than authenticated client leads, because the backend cannot rely on a user profile to fill in those details. All fields in the anonymous lead form must be provided explicitly.
+</Note>
+
+---
+
+## 1. Create Anonymous Lead
+
+```
+POST /crear-lead
+```
+
+**Authentication:** None — this endpoint is fully public.
+
+**Content-Type:** `application/json`
+
+Submits a new lead from an unauthenticated visitor. The payload must include visitor contact details, the property of interest, and an optional agent assignment.
+
+### Request body
+
+<ParamField body="agent_id" type="number | ''">
+  Numeric ID of the agent to assign this lead to. Pass an empty string `""` or omit to let the backend auto-assign. Typed as `number | ""` in the `FormDataLead` interface.
+</ParamField>
+
+<ParamField body="property_id" type="number" required>
+  The numeric ID of the property the visitor is interested in.
+</ParamField>
+
+<ParamField body="full_name" type="string" required>
+  Full name of the visitor submitting the lead.
+</ParamField>
+
+<ParamField body="phone" type="string" required>
+  Contact phone number of the visitor. Include country code for international numbers, e.g. `"+573001234567"`.
+</ParamField>
+
+<ParamField body="email" type="string" required>
+  Email address of the visitor. Used for follow-up communication.
+</ParamField>
+
+<ParamField body="interest" type="string" required>
+  Short description of the visitor's interest type, e.g. `"Compra"`, `"Arriendo"`, `"Información"`.
+</ParamField>
+
+<ParamField body="message" type="string" required>
+  Free-text message from the visitor with additional context or questions.
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  `true` when the lead was created successfully.
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  Human-readable outcome message.
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Created lead data.
+
+  <Expandable title="data fields">
+    <ResponseField name="id" type="number">
+      Unique numeric ID of the new lead.
+    </ResponseField>
+
+    <ResponseField name="code" type="string">
+      Unique alphanumeric tracking code for the lead, e.g. `"LDA-2024-0042"`. Share this with the visitor so they can reference the inquiry.
+    </ResponseField>
+
+    <ResponseField name="agent_id" type="number">
+      ID of the assigned agent.
+    </ResponseField>
+
+    <ResponseField name="property_id" type="number">
+      ID of the property this lead is associated with.
+    </ResponseField>
+
+    <ResponseField name="full_name" type="string">
+      Visitor's full name as submitted.
+    </ResponseField>
+
+    <ResponseField name="interest" type="string">
+      Interest type as submitted.
+    </ResponseField>
+
+    <ResponseField name="status" type="string">
+      Initial status of the lead, typically `"Nuevo"`.
+    </ResponseField>
+
+    <ResponseField name="priority" type="string">
+      Initial priority level, typically `"Normal"`.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="errors" type="Record<string, string[]>">
+  Field-level validation errors returned on `422` responses.
+</ResponseField>
+
+### TypeScript interfaces
+
+```typescript
+// From types/properties/property-lead.type.ts
+export type FormDataLead = {
+  agent_id: number | "";
+  property_id: number;
+  full_name: string;
+  phone: string;
+  email: string;
+  interest: string;
+  message: string;
+};
+
+// From types/leads/lead-reponse.type.ts
+export type CreateLeadResponse = {
+  success: boolean;
+  message: string;
+  data?: {
+    id: number;
+    code: string;
+    agent_id: number;
+    property_id: number;
+    full_name: string;
+    interest: string;
+    status: string;
+    priority: string;
+  };
+  errors?: Record<string, string[]>;
+};
+```
+
+### cURL example
+
+```bash
+curl --request POST \
+  --url "${REACT_APP_API_URL}/crear-lead" \
+  --header "Content-Type: application/json" \
+  --header "Accept: application/json" \
+  --data '{
+    "agent_id": 5,
+    "property_id": 14,
+    "full_name": "Carlos Pérez",
+    "phone": "+573001234567",
+    "email": "carlos.perez@email.com",
+    "interest": "Compra",
+    "message": "Estoy interesado en conocer más detalles sobre este apartamento."
+  }'
+```
+
+### TypeScript (fetch)
+
+```typescript
+import { CreateLeadResponse } from "./types/leads/lead-reponse.type";
+import { FormDataLead } from "./types/properties/property-lead.type";
+
+const BASE_URL = process.env.REACT_APP_API_URL;
+
+export const createLeadAnonymous = async (
+  formData: FormDataLead
+): Promise<CreateLeadResponse> => {
+  const response = await fetch(`${BASE_URL}/crear-lead`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(formData),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw data; // Backend error object thrown directly
+  }
+
+  return data;
+};
+```
+
+<Warning>
+  The anonymous lead service throws the raw response `data` object (not an `Error` instance) when the request fails. Handle this in your component's catch block by checking for `data.message` or `data.errors` directly.
+</Warning>
+
+### Sample response
+
+```json
+{
+  "success": true,
+  "message": "Lead creado exitosamente",
+  "data": {
+    "id": 101,
+    "code": "LDA-2024-0101",
+    "agent_id": 5,
+    "property_id": 14,
+    "full_name": "Carlos Pérez",
+    "interest": "Compra",
+    "status": "Nuevo",
+    "priority": "Normal"
+  }
+}
+```
+
+---
+
+## 2. List Anonymous Leads (Admin)
+
+```
+GET /mostrar-leads-anonimos
+```
+
+**Authentication:** `Authorization: Bearer <token>` — Administrator or Agent role required.
+
+Returns all anonymous leads stored in the system. The service handles specific HTTP status codes (401, 404, 500) and surfaces them as descriptive errors.
+
+### Response
+
+The response wraps the lead array in the standard API envelope.
+
+<ResponseField name="success" type="boolean" required>
+  `true` when leads were retrieved successfully.
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  Outcome message from the server.
+</ResponseField>
+
+<ResponseField name="data" type="AnonymousLead[]" required>
+  Array of anonymous lead records.
+
+  <Expandable title="AnonymousLead fields">
+    <ResponseField name="id" type="number" required>
+      Unique numeric ID of the lead.
+    </ResponseField>
+
+    <ResponseField name="code" type="string" required>
+      Unique tracking code assigned at creation time.
+    </ResponseField>
+
+    <ResponseField name="full_name" type="string" required>
+      Full name of the visitor who submitted the lead.
+    </ResponseField>
+
+    <ResponseField name="email" type="string" required>
+      Contact email of the visitor.
+    </ResponseField>
+
+    <ResponseField name="phone" type="string" required>
+      Contact phone number of the visitor.
+    </ResponseField>
+
+    <ResponseField name="interest" type="string" required>
+      Interest type as submitted by the visitor.
+    </ResponseField>
+
+    <ResponseField name="status" type="string" required>
+      Current lead status, e.g. `"Nuevo"`, `"En Proceso"`, `"Cerrado"`.
+    </ResponseField>
+
+    <ResponseField name="priority" type="string" required>
+      Lead priority level, e.g. `"Normal"`, `"Alta"`, `"Urgente"`.
+    </ResponseField>
+
+    <ResponseField name="created_at" type="string" required>
+      ISO 8601 timestamp of when the lead was submitted.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### TypeScript interfaces
+
+```typescript
+// From types/leads/get-response-anonymous-lead.interface.ts
+export interface AnonymousLead {
+  id: number;
+  code: string;
+  full_name: string;
+  email: string;
+  phone: string;
+  interest: string;
+  status: string;
+  priority: string;
+  created_at: string;
+}
+
+export interface apiResponseLead {
+  success: boolean;
+  message: string;
+  data: AnonymousLead[];
+}
+```
+
+### cURL example
+
+```bash
+curl --request GET \
+  --url "${REACT_APP_API_URL}/mostrar-leads-anonimos" \
+  --header "Authorization: Bearer <token>" \
+  --header "Content-Type: application/json" \
+  --header "Accept: application/json"
+```
+
+### TypeScript (fetch)
+
+```typescript
+import {
+  AnonymousLead,
+  apiResponseLead,
+} from "./types/leads/get-response-anonymous-lead.interface";
+
+const BASE_URL = process.env.REACT_APP_API_URL;
+
+export const getDataAnonymousLeadService = async (
+  token: string
+): Promise<AnonymousLead[]> => {
+  const response = await fetch(`${BASE_URL}/mostrar-leads-anonimos`, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+      accept: "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (response.status === 401) throw new Error("No Autorizado");
+  if (response.status === 404) throw new Error("No hay registros almacenados");
+  if (response.status === 500) throw new Error("Error interno del servidor");
+  if (!response.ok) throw new Error("Error obteniendo los leads anónimos");
+
+  const result: apiResponseLead = await response.json();
+  return result.data;
+};
+```
+
+### Sample response
+
+```json
+{
+  "success": true,
+  "message": "Leads anónimos obtenidos correctamente",
+  "data": [
+    {
+      "id": 101,
+      "code": "LDA-2024-0101",
+      "full_name": "Carlos Pérez",
+      "email": "carlos.perez@email.com",
+      "phone": "+573001234567",
+      "interest": "Compra",
+      "status": "Nuevo",
+      "priority": "Normal",
+      "created_at": "2024-07-15T14:30:00Z"
+    }
+  ]
+}
+```
+
+## Error handling
+
+| HTTP Status | Endpoint | Meaning |
+|-------------|----------|---------|
+| `200` / `201` | POST, GET | Success. |
+| `401` | GET | Token missing or expired. |
+| `403` | GET | Role not permitted to list leads. |
+| `404` | GET | No anonymous leads stored yet. |
+| `422` | POST | Validation error — check `errors` for field-level messages. |
+| `500` | Both | Internal server error. |
+
+<Tip>
+  Display the lead `code` to the visitor after a successful anonymous submission so they have a reference number for their inquiry. You can also set up an automated confirmation email on the backend using this code.
+</Tip>

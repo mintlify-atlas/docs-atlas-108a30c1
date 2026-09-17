@@ -1,0 +1,173 @@
+---
+title: "POST /iniciar-sesion — Authenticate a User"
+sidebarTitle: "POST /iniciar-sesion"
+description: "Exchange an email and password for a Bearer token that authenticates all subsequent Metrica Bienes Raices API requests."
+---
+
+The login endpoint validates a user's credentials and returns a signed Bearer token (`auth_token_mbr`) that must be attached to every authenticated request in the platform. No prior authentication is required to call this endpoint.
+
+## Request
+
+**Method:** `POST`  
+**Path:** `/iniciar-sesion`  
+**Authentication:** None
+
+### Headers
+
+| Header | Value |
+|---|---|
+| `Content-Type` | `application/json` |
+
+### Body Parameters
+
+<ParamField body="email" type="string" required>
+  The registered email address of the user account.
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  The account password in plain text. Transmitted over HTTPS only.
+</ParamField>
+
+## Response
+
+On a successful login (`200 OK`) the server returns a JSON object with the authenticated user's profile and session token.
+
+<ResponseField name="email" type="string">
+  The email address of the authenticated user.
+</ResponseField>
+
+<ResponseField name="username" type="string">
+  The display name / username associated with the account.
+</ResponseField>
+
+<ResponseField name="role" type="string">
+  The user's role in the system. One of `admin`, `agent`, or `client`. Use this value to determine which dashboard to redirect the user to after login.
+</ResponseField>
+
+<ResponseField name="auth_token_mbr" type="string">
+  The Bearer token. Store this in your Redux `auth` slice (`state.auth.auth_token_mbr`) and attach it as `Authorization: Bearer <auth_token_mbr>` on every subsequent authenticated request.
+</ResponseField>
+
+<ResponseField name="active" type="boolean">
+  Whether the account is currently active. If `false`, the user may be suspended and should be denied access to protected routes.
+</ResponseField>
+
+## Examples
+
+<Tabs>
+  <Tab title="cURL">
+    ```bash
+    curl -X POST https://api.metricabienesraices.com/iniciar-sesion \
+      -H "Content-Type: application/json" \
+      -d '{
+        "email": "agente@metrica.com",
+        "password": "MiContraseña123"
+      }'
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    The following mirrors the `loginRequest()` function from `login.service.ts`:
+
+    ```typescript
+    interface LoginCredentials {
+      email: string;
+      password: string;
+      rememberMe: boolean;
+    }
+
+    interface LoginResponse {
+      email: string;
+      username: string;
+      role: string;
+      auth_token_mbr: string;
+      active: boolean;
+    }
+
+    async function loginRequest(
+      credentials: LoginCredentials
+    ): Promise<LoginResponse> {
+      const response = await fetch(
+        `${process.env.REACT_APP_API_URL}/iniciar-sesion`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email: credentials.email,
+            password: credentials.password,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Error en la solicitud");
+      }
+
+      return data;
+    }
+    ```
+  </Tab>
+  <Tab title="Redux Thunk">
+    The frontend dispatches `loginUser` from the `auth` slice. After a successful fulfillment the Redux store is updated with all response fields:
+
+    ```typescript
+    import { useAppDispatch } from "../store/hooks";
+    import { loginUser } from "../features/auth/auth.thunks";
+
+    const dispatch = useAppDispatch();
+
+    await dispatch(
+      loginUser({ email: "agente@metrica.com", password: "MiContraseña123", rememberMe: false })
+    );
+    // store.auth.auth_token_mbr is now populated
+    ```
+  </Tab>
+</Tabs>
+
+## Success Response Example
+
+```json
+{
+  "email": "agente@metrica.com",
+  "username": "Carlos Gómez",
+  "role": "agent",
+  "auth_token_mbr": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "active": true
+}
+```
+
+## Error Handling
+
+When the credentials are invalid or the account does not exist, the API returns a non-2xx status code with a JSON body containing a `message` field:
+
+```json
+{
+  "message": "Credenciales inválidas"
+}
+```
+
+The service layer re-throws this as a JavaScript `Error` with `data.message` as its message string, which Redux Toolkit's `createAsyncThunk` catches and stores in `state.auth.error`.
+
+<Warning>
+  Never log or persist `auth_token_mbr` in `localStorage` without considering XSS risks. The recommended approach in this codebase is in-memory storage via the Redux store, which clears on page refresh.
+</Warning>
+
+## Redux Auth State After Login
+
+After `loginUser.fulfilled` fires, the `auth` slice contains:
+
+```typescript
+interface AuthState {
+  email: string | null;
+  username: string | null;
+  role: string | null;
+  auth_token_mbr: string | null; // ← Bearer token
+  active: boolean;
+  isAuthenticated: boolean;      // ← set to true
+  loading: boolean;
+  error: any;
+}
+```

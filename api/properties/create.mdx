@@ -1,0 +1,233 @@
+---
+title: "Create a New Property — Metrica Bienes Raices API"
+sidebarTitle: "Create Property"
+description: "Submit a multipart/form-data request to publish a new real estate listing, including title, specs, pricing, address, and up to N image files."
+---
+
+The **Create Property** endpoint allows administrators to publish a new real estate listing on the Metrica Bienes Raices platform. The request must be sent as `multipart/form-data` because it accepts image file uploads alongside structured listing data. All text fields are appended to the `FormData` object individually, and images are appended using indexed keys (`images[0]`, `images[1]`, etc.). The `Content-Type` header must **not** be set manually — the browser or `fetch` API sets it automatically with the correct `boundary` when a `FormData` body is used.
+
+## Endpoint
+
+```
+POST /crear-propiedad
+```
+
+**Authentication:** `Authorization: Bearer <token>` — Administrator role required.
+
+**Content-Type:** `multipart/form-data` (set automatically by the browser/fetch with boundary).
+
+<Warning>
+  Never set the `Content-Type: multipart/form-data` header manually when using the browser `FormData` API. Omitting the header lets the runtime append the required `boundary` parameter. Setting it manually will break file uploads.
+</Warning>
+
+## Request fields
+
+<ParamField body="title" type="string" required>
+  The display title of the property listing, e.g. `"Casa campestre en El Retiro"`.
+</ParamField>
+
+<ParamField body="description" type="string">
+  Long-form description of the property. Defaults to an empty string when omitted.
+</ParamField>
+
+<ParamField body="nearby_places[]" type="string[]">
+  Array of nearby places of interest. Each element is appended as a separate `nearby_places[]` field in the form data. Example values: `"Centro Comercial El Tesoro"`, `"Parque Arví"`.
+</ParamField>
+
+<ParamField body="price" type="string" required>
+  Listing price as a numeric string (no currency symbols), e.g. `"450000000"`.
+</ParamField>
+
+<ParamField body="type_standar" type="string" required>
+  Transaction type. Accepted values: `"Venta"`, `"Arriendo"`.
+</ParamField>
+
+<ParamField body="category" type="string" required>
+  Top-level property category. Must match one of the configured categories, e.g. `"Espacios Para Vivir"`, `"Inversión Inteligente"`, `"Patrimonio Campestre"`, `"Espacios Especiales"`, `"Oportunidades de Futuro"`, `"Inversion Internacional"`.
+</ParamField>
+
+<ParamField body="subcategory" type="string" required>
+  Subcategory within the selected `category`, e.g. `"Apartamentos"`, `"Casas"`, `"Penthouse"`, `"Fincas"`, `"Lotes Campestres"`.
+</ParamField>
+
+<ParamField body="bedrooms" type="number" required>
+  Number of bedrooms. Serialized as a string in form data (`data.bedrooms.toString()`).
+</ParamField>
+
+<ParamField body="bathrooms" type="number" required>
+  Number of bathrooms. Serialized as a string in form data.
+</ParamField>
+
+<ParamField body="garages" type="number" required>
+  Number of garage spaces. Serialized as a string in form data.
+</ParamField>
+
+<ParamField body="built_area" type="number">
+  Built area in square meters. Defaults to `0` when omitted.
+</ParamField>
+
+<ParamField body="land_area" type="number">
+  Land area in square meters. Defaults to `0` when omitted.
+</ParamField>
+
+<ParamField body="status" type="string">
+  Publication status. Defaults to `"Disponible"` when not provided. Other accepted values: `"Vendido"`, `"No Disponible"`.
+</ParamField>
+
+<ParamField body="address" type="string" required>
+  Street address of the property, e.g. `"Calle 33 # 74-12"`.
+</ParamField>
+
+<ParamField body="city" type="string" required>
+  City where the property is located, e.g. `"Medellín"`.
+</ParamField>
+
+<ParamField body="images[0], images[1], …" type="File">
+  One or more image files. Each file is appended with an indexed key (`images[0]`, `images[1]`, etc.). Supported formats are determined by the backend storage configuration. The field is optional — a listing can be created without images.
+</ParamField>
+
+## Response
+
+```json
+{
+  "success": true,
+  "message": "Propiedad creada exitosamente",
+  "data": {
+    "id": 42,
+    "title": "Casa campestre en El Retiro",
+    "status": "Disponible"
+  }
+}
+```
+
+<ResponseField name="success" type="boolean" required>
+  `true` on successful creation.
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  Human-readable result message.
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Partial property object returned after creation, at minimum containing the new `id`.
+</ResponseField>
+
+## Examples
+
+### cURL (multipart/form-data)
+
+```bash
+curl --request POST \
+  --url "${REACT_APP_API_URL}/crear-propiedad" \
+  --header "Authorization: Bearer <token>" \
+  --form "title=Casa campestre en El Retiro" \
+  --form "description=Hermosa casa rodeada de naturaleza con vista a la montaña" \
+  --form "nearby_places[]=Parque Arví" \
+  --form "nearby_places[]=Centro Comercial El Tesoro" \
+  --form "price=650000000" \
+  --form "type_standar=Venta" \
+  --form "category=Patrimonio Campestre" \
+  --form "subcategory=Casas Campestres" \
+  --form "bedrooms=4" \
+  --form "bathrooms=3" \
+  --form "garages=2" \
+  --form "built_area=280" \
+  --form "land_area=1500" \
+  --form "status=Disponible" \
+  --form "address=Vereda La Palma Km 3" \
+  --form "city=El Retiro" \
+  --form "images[0]=@/path/to/photo1.jpg" \
+  --form "images[1]=@/path/to/photo2.jpg"
+```
+
+### TypeScript (fetch)
+
+```typescript
+import { NewProperty } from "./types/properties/property.types";
+
+const BASE_URL = process.env.REACT_APP_API_URL;
+
+export const createProperty = async (data: NewProperty, token: string) => {
+  const formData = new FormData();
+
+  formData.append("title", data.title);
+  formData.append("description", data.description || "");
+
+  data.nearby_places.forEach((place) => {
+    formData.append("nearby_places[]", place);
+  });
+
+  formData.append("price", data.price.toString());
+  formData.append("type_standar", data.type_standar);
+  formData.append("category", data.category);
+  formData.append("subcategory", data.subcategory);
+  formData.append("bedrooms", data.bedrooms.toString());
+  formData.append("bathrooms", data.bathrooms.toString());
+  formData.append("garages", data.garages.toString());
+  formData.append("built_area", (data.built_area || 0).toString());
+  formData.append("land_area", (data.land_area || 0).toString());
+  formData.append("status", data.status || "Disponible");
+  formData.append("address", data.address);
+  formData.append("city", data.city);
+
+  if (data.images && data.images.length > 0) {
+    data.images.forEach((file: File, index: number) => {
+      formData.append(`images[${index}]`, file);
+    });
+  }
+
+  // Do NOT set Content-Type manually — let fetch set it with the boundary
+  const response = await fetch(`${BASE_URL}/crear-propiedad`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: formData,
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result.message || "Error al crear la propiedad");
+  }
+
+  return result;
+};
+```
+
+## `NewProperty` TypeScript interface
+
+```typescript
+export interface NewProperty {
+  title: string;
+  description: string;
+  nearby_places: string[];
+  price: string;
+  type_standar: string;
+  category: string;
+  subcategory: string;
+  bedrooms: number;
+  bathrooms: number;
+  garages: number;
+  built_area: number;
+  land_area: number;
+  status: string;
+  address: string;
+  city: string;
+  images?: File[];
+}
+```
+
+## Error handling
+
+| HTTP Status | Meaning |
+|-------------|---------|
+| `201` / `200` | Property created successfully. |
+| `401` | Missing or invalid Bearer token. |
+| `403` | Authenticated user does not have Administrator role. |
+| `422` | Validation error — one or more required fields are missing or malformed. |
+| `500` | Internal server error. |
+
+<Note>
+  The service wraps all errors and re-throws them as `Error` objects with a descriptive `.message` string. Catch these in your Redux `createAsyncThunk` rejected case to display user-facing error toasts.
+</Note>

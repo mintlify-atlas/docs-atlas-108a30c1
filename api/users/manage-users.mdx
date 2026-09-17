@@ -1,0 +1,589 @@
+---
+title: "Manage Users — Metrica Bienes Raices Admin API"
+sidebarTitle: "Manage Users"
+description: "List, create, delete, toggle status, view details, and update profiles for platform users. All endpoints require a valid Bearer token."
+---
+
+The **Manage Users** set of endpoints gives administrators and authenticated users full control over user accounts on the Metrica Bienes Raices platform. Administrators can list all users, create new accounts, delete accounts, and toggle activation status. Any authenticated user can view their own details and update their own profile. All operations require a valid Bearer token obtained during the authentication flow.
+
+## User object — `ApiUser`
+
+Every user-related response returns objects that conform to the `ApiUser` interface:
+
+```typescript
+export interface ApiUser {
+  id: number;
+  full_name: string;
+  username: string;
+  document_type: "CC" | "CE" | "NIT" | "PSS";
+  document_number: string;
+  email: string;
+  phone: string | null;
+  is_active: boolean;
+}
+```
+
+<ResponseField name="id" type="number" required>
+  Unique numeric identifier for the user.
+</ResponseField>
+
+<ResponseField name="full_name" type="string" required>
+  Resolved full name (first name + last name) of the user.
+</ResponseField>
+
+<ResponseField name="username" type="string" required>
+  Unique username used for login.
+</ResponseField>
+
+<ResponseField name="document_type" type="string" required>
+  Colombian/international identity document type. One of `"CC"` (Cédula de Ciudadanía), `"CE"` (Cédula de Extranjería), `"NIT"` (Número de Identificación Tributaria), `"PSS"` (Pasaporte).
+</ResponseField>
+
+<ResponseField name="document_number" type="string" required>
+  Document number matching the selected `document_type`.
+</ResponseField>
+
+<ResponseField name="email" type="string" required>
+  User's email address. Must be unique across the platform.
+</ResponseField>
+
+<ResponseField name="phone" type="string | null" required>
+  User's phone number. `null` when not yet provided.
+</ResponseField>
+
+<ResponseField name="is_active" type="boolean" required>
+  `true` when the account is active and the user can log in.
+</ResponseField>
+
+---
+
+## 1. List All Users
+
+```
+GET /full-users
+```
+
+**Authentication:** `Authorization: Bearer <token>` — Administrator role required.
+
+Returns the complete list of registered platform users. The response envelope wraps the `ApiUser[]` array.
+
+### cURL example
+
+```bash
+curl --request GET \
+  --url "${REACT_APP_API_URL}/full-users" \
+  --header "Authorization: Bearer <token>" \
+  --header "Content-Type: application/json"
+```
+
+### TypeScript example
+
+```typescript
+import { ApiResponse, ApiUser } from "./types/users/user.interface";
+
+const BASE_URL = process.env.REACT_APP_API_URL;
+
+export const getFullUsers = async (
+  auth_token_mbr: string
+): Promise<ApiUser[]> => {
+  const response = await fetch(`${BASE_URL}/full-users`, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${auth_token_mbr}`,
+    },
+  });
+
+  const data: ApiResponse<ApiUser[]> = await response.json();
+
+  if (!response.ok || !data.success) {
+    throw new Error(data.message || "Error al obtener usuarios");
+  }
+
+  return data.data;
+};
+```
+
+### Sample response
+
+```json
+{
+  "success": true,
+  "message": "Usuarios obtenidos correctamente",
+  "data": [
+    {
+      "id": 3,
+      "full_name": "Laura Martínez",
+      "username": "lmartinez",
+      "document_type": "CC",
+      "document_number": "1234567890",
+      "email": "laura@example.com",
+      "phone": "+573001234567",
+      "is_active": true
+    }
+  ]
+}
+```
+
+---
+
+## 2. Get User Details
+
+```
+GET /details-user/:id
+```
+
+**Authentication:** `Authorization: Bearer <token>`
+
+Fetches full profile details for a specific user by their numeric ID.
+
+### Path parameters
+
+<ParamField path="id" type="number" required>
+  Numeric ID of the user whose details should be retrieved.
+</ParamField>
+
+### cURL example
+
+```bash
+curl --request GET \
+  --url "${REACT_APP_API_URL}/details-user/3" \
+  --header "Authorization: Bearer <token>"
+```
+
+### TypeScript example
+
+```typescript
+export const getUserDetails = async (id: number, auth_token_mbr: string) => {
+  const response = await fetch(`${BASE_URL}/details-user/${id}`, {
+    headers: {
+      Authorization: `Bearer ${auth_token_mbr}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error("Error al obtener detalles del usuario");
+  }
+
+  return response.json();
+};
+```
+
+---
+
+## 3. Create User
+
+```
+POST /nuevo-usuario
+```
+
+**Authentication:** `Authorization: Bearer <token>` — Administrator role required.
+
+**Content-Type:** `application/json`
+
+Creates a new platform user and assigns a role. The `role_id` maps to the three roles: `1` = Administrador, `2` = Agente, `3` = Cliente.
+
+### Request body
+
+<ParamField body="email" type="string" required>
+  Email address for the new account. Must be unique across the platform. A `409` is returned if already registered.
+</ParamField>
+
+<ParamField body="username" type="string" required>
+  Unique username for login.
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  Initial password for the account. The backend is expected to hash this before storage.
+</ParamField>
+
+<ParamField body="role_id" type="number" required>
+  Numeric role identifier. Accepted values: `1` (Administrador), `2` (Agente), `3` (Cliente).
+</ParamField>
+
+<ParamField body="is_active" type="boolean" required>
+  Whether the account should be active immediately after creation. Pass `true` to allow login right away.
+</ParamField>
+
+### Response
+
+<ResponseField name="id" type="number" required>
+  ID of the newly created user.
+</ResponseField>
+
+<ResponseField name="email" type="string" required>
+  Email of the newly created user.
+</ResponseField>
+
+<ResponseField name="username" type="string" required>
+  Username of the newly created user.
+</ResponseField>
+
+<ResponseField name="role_id" type="number" required>
+  Assigned role ID.
+</ResponseField>
+
+<ResponseField name="is_active" type="boolean" required>
+  Activation state of the new account.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp of account creation, when returned by the backend.
+</ResponseField>
+
+### cURL example
+
+```bash
+curl --request POST \
+  --url "${REACT_APP_API_URL}/nuevo-usuario" \
+  --header "Authorization: Bearer <token>" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "email": "nuevo.agente@metrica.com",
+    "username": "nagente01",
+    "password": "SecurePass123!",
+    "role_id": 2,
+    "is_active": true
+  }'
+```
+
+### TypeScript example
+
+```typescript
+import {
+  CreateUserRequest,
+  CreateUserResponse,
+} from "./types/users/create-user.interface";
+
+export async function createUserService(
+  payload: CreateUserRequest,
+  token: string
+): Promise<CreateUserResponse> {
+  const response = await fetch(`${BASE_URL}/nuevo-usuario`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw {
+      status: response.status,
+      message: data?.message || `Error ${response.status}`,
+      fieldErrors: data?.errors ?? undefined,
+    };
+  }
+
+  return data;
+}
+```
+
+<Note>
+  The `createUserService` throws a structured `ApiError` object (not a plain `Error`) when the request fails. Catch it with `instanceof` checks or inspect the `status` and `fieldErrors` properties in your Redux `createAsyncThunk` rejected handler.
+</Note>
+
+### Known error codes
+
+| HTTP Status | Meaning |
+|-------------|---------|
+| `409` | Email already registered in the system. |
+| `422` | Invalid or incomplete field data. |
+| `401` | Not authenticated — log in again. |
+| `403` | Insufficient permissions. |
+| `500` | Internal server error. |
+
+---
+
+## 4. Delete User
+
+```
+DELETE /eliminar-usuario/:id
+```
+
+**Authentication:** `Authorization: Bearer <token>` — Administrator role required.
+
+Permanently removes a user account by its numeric ID. Returns the confirmation message as a plain string.
+
+### Path parameters
+
+<ParamField path="id" type="number" required>
+  Numeric ID of the user to delete.
+</ParamField>
+
+<Warning>
+  Deleting a user account is a permanent operation. All data associated with the user, including leads and calendar events, may be cascade-deleted depending on backend configuration. Confirm the action with the administrator before dispatching.
+</Warning>
+
+### cURL example
+
+```bash
+curl --request DELETE \
+  --url "${REACT_APP_API_URL}/eliminar-usuario/7" \
+  --header "Authorization: Bearer <token>" \
+  --header "Content-Type: application/json" \
+  --header "Accept: application/json"
+```
+
+### TypeScript example
+
+```typescript
+export const deleteUserRequest = async (
+  id: number,
+  token: string
+): Promise<string> => {
+  const response = await fetch(`${BASE_URL}/eliminar-usuario/${id}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.message || "Error al eliminar usuario");
+  }
+
+  return data.message;
+};
+```
+
+### Sample response
+
+```json
+{
+  "success": true,
+  "message": "Usuario eliminado exitosamente"
+}
+```
+
+---
+
+## 5. Update User Status (Toggle Active/Inactive)
+
+```
+PATCH /cambiar-estado/:userId
+```
+
+**Authentication:** `Authorization: Bearer <token>` — Administrator role required.
+
+**Content-Type:** `application/json`
+
+Activates or deactivates a user account. When `is_active` is set to `false`, the user cannot log in until the account is reactivated.
+
+### Path parameters
+
+<ParamField path="userId" type="number" required>
+  Numeric ID of the user whose activation status should change.
+</ParamField>
+
+### Request body
+
+<ParamField body="is_active" type="boolean" required>
+  `true` to activate the account; `false` to deactivate it.
+</ParamField>
+
+### Response
+
+<ResponseField name="ok" type="boolean" required>
+  `true` when the status was changed successfully. `false` on any error.
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Backend response data when `ok` is `true`.
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message when `ok` is `false`.
+</ResponseField>
+
+<ResponseField name="status" type="number">
+  HTTP status code, present when `ok` is `false`.
+</ResponseField>
+
+### cURL example
+
+```bash
+curl --request PATCH \
+  --url "${REACT_APP_API_URL}/cambiar-estado/7" \
+  --header "Authorization: Bearer <token>" \
+  --header "Content-Type: application/json" \
+  --data '{ "is_active": false }'
+```
+
+### TypeScript example
+
+```typescript
+export const changeUserStatus = async (
+  userId: number,
+  isActive: boolean,
+  token: string
+) => {
+  const response = await fetch(`${BASE_URL}/cambiar-estado/${userId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ is_active: isActive }),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      error: data.message || "Error al cambiar estado",
+      status: response.status,
+    };
+  }
+
+  return { ok: true, data };
+};
+```
+
+---
+
+## 6. Update Own Profile
+
+```
+PUT /update-profile
+```
+
+**Authentication:** `Authorization: Bearer <token>` — Any authenticated user.
+
+**Content-Type:** `application/json`
+
+Allows the currently authenticated user to update their own profile information. The token identity determines which record is updated — no user ID is passed in the URL.
+
+### Request body
+
+<ParamField body="first_name" type="string" required>
+  User's first name.
+</ParamField>
+
+<ParamField body="last_name" type="string" required>
+  User's last name.
+</ParamField>
+
+<ParamField body="email" type="string" required>
+  Updated email address.
+</ParamField>
+
+<ParamField body="phone" type="string" required>
+  Contact phone number.
+</ParamField>
+
+<ParamField body="document_type" type="string" required>
+  Document type. Accepted values: `"CC"`, `"CE"`, `"PASS"`, or `""` (empty string to clear).
+</ParamField>
+
+<ParamField body="document_number" type="string" required>
+  Identity document number matching `document_type`.
+</ParamField>
+
+<ParamField body="address" type="string" required>
+  Residential street address.
+</ParamField>
+
+<ParamField body="city" type="string" required>
+  City of residence.
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  `true` when the profile was updated.
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  Outcome message, e.g. `"Perfil actualizado correctamente"`.
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Updated profile fields returned from the server.
+
+  <Expandable title="data fields">
+    <ResponseField name="first_name" type="string" />
+    <ResponseField name="last_name" type="string" />
+    <ResponseField name="email" type="string" />
+    <ResponseField name="phone" type="string" />
+    <ResponseField name="document_type" type="string | null" />
+    <ResponseField name="document_number" type="string" />
+    <ResponseField name="address" type="string" />
+    <ResponseField name="city" type="string" />
+    <ResponseField name="role" type="string">
+      Role label string, e.g. `"Agente"`.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### cURL example
+
+```bash
+curl --request PUT \
+  --url "${REACT_APP_API_URL}/update-profile" \
+  --header "Authorization: Bearer <token>" \
+  --header "Content-Type: application/json" \
+  --header "Accept: application/json" \
+  --data '{
+    "first_name": "Laura",
+    "last_name": "Martínez",
+    "email": "laura@metrica.com",
+    "phone": "+573001234567",
+    "document_type": "CC",
+    "document_number": "1234567890",
+    "address": "Calle 10 # 43-25",
+    "city": "Medellín"
+  }'
+```
+
+### TypeScript example
+
+```typescript
+import {
+  UpdateProfilePayload,
+  UpdateProfileResponse,
+} from "./types/users/update-profile.interface";
+
+export const updateUserProfile = async (
+  payload: UpdateProfilePayload,
+  token: string
+): Promise<UpdateProfileResponse> => {
+  const response = await fetch(`${API_URL}/update-profile`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data: UpdateProfileResponse = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.message || "Error al actualizar el perfil");
+  }
+
+  return data;
+};
+```
+
+## Error handling (all user endpoints)
+
+| HTTP Status | Meaning |
+|-------------|---------|
+| `200` | Success. |
+| `401` | Missing, expired, or invalid Bearer token. |
+| `403` | Role does not have permission for this action. |
+| `404` | User not found for the given ID. |
+| `409` | Conflict — email already in use (create only). |
+| `422` | Validation failure — inspect `errors` field for per-field messages. |
+| `500` | Internal server error. |

@@ -1,24 +1,11 @@
 {
-  "$schema": "https://mintlify.com/docs.json",
-  "name": "Metrica Bienes Raices",
+  "projectType": "saas",
+  "projectName": "Metrica Bienes Raices",
+  "projectDescription": "A full-stack real estate management platform with role-based dashboards for administrators, agents, and clients — covering property listings, CRM leads, calendar scheduling, analytics reports, and user management.",
   "theme": "luma",
-  "colors": {
-    "primary": "#22d3ee",
-    "light": "#000000",
-    "dark": "#1c4f50"
-  },
-  "favicon": "https://media.brand.dev/b78e6474-1f8c-4ce5-af35-2c94f7c8e4eb.png",
-  "navbar": {
-    "primary": {
-      "type": "github",
-      "href": "https://github.com/Gxrman-exe/MetricaBienesRaices"
-    }
-  },
-  "footer": {
-    "socials": {
-      "github": "https://github.com/Gxrman-exe/MetricaBienesRaices"
-    }
-  },
+  "primaryColor": "#22d3ee",
+  "lightColor": "#000000",
+  "darkColor": "#1c4f50",
   "navigation": {
     "tabs": [
       {
@@ -121,5 +108,35 @@
         ]
       }
     ]
-  }
+  },
+  "keyFeatures": [
+    "Role-based access control with three roles: Administrador, Agente, and Cliente",
+    "Property listings with filtering, search, and image galleries",
+    "CRM lead management for both registered and anonymous users",
+    "Calendar scheduling with event creation, agent assignment, and status tracking",
+    "Admin analytics reports with agent performance metrics and PDF/Excel export",
+    "User management including creation, deletion, and status toggling",
+    "Password recovery flow with verification code",
+    "Case transfer between agents",
+    "PDF report generation for properties and user information"
+  ],
+  "publicApiSurface": [
+    "POST /iniciar-sesion — authenticate a user and return a JWT token",
+    "POST /forgot-password — initiate password recovery",
+    "POST /reset-password — finalize password reset with verification code",
+    "GET /todas-propiedades — list all published properties",
+    "GET /full-users — list all users (admin-only, requires Bearer token)",
+    "POST /crear-propiedad — create a new property listing (multipart/form-data)",
+    "PATCH /patch-property-status — update property publication status",
+    "DELETE /delete-property/:id — delete a property by ID",
+    "POST /client-crear-lead — client creates a lead for a property/agent",
+    "POST /create-lead-anonymous — anonymous lead submission",
+    "PATCH /patch-update-status-lead — update lead status",
+    "POST /calendar-events — create a calendar event",
+    "GET /calendar-events — list calendar events for the authenticated user",
+    "PATCH /change-status-event/:id — update calendar event status",
+    "DELETE /delete-calendar-event/:id — delete a calendar event",
+    "GET /admin-reports?range=:range — fetch analytics report data (admin-only)",
+    "PUT /update-profile — update user profile information"
+  ]
 }

@@ -1,0 +1,212 @@
+---
+title: "POST /create-user-client — Register a New Client"
+sidebarTitle: "Register"
+description: "Create a new client account in Metrica Bienes Raices. New users are always assigned the Cliente role and must verify their email."
+---
+
+The registration flow creates a new client-role user account. The frontend registration page at `/registro` collects an email address, a username, and a password, then calls `POST /create-user-client`. All new accounts receive the **Cliente** role by default — agent and admin accounts are provisioned separately through the admin panel.
+
+## Registration Flow Overview
+
+<Steps>
+  <Step title="Send Registration Code">
+    Before the final account is created, the frontend calls `POST /send-code` with `{ email, username, password }`. The backend sends a one-time verification code to the supplied email address.
+  </Step>
+  <Step title="Verify the Code">
+    The user enters the code received by email. The frontend calls `POST /api/auth/verify-code` with `{ email, code }` to validate it.
+  </Step>
+  <Step title="Create the Account">
+    After the code is verified, the frontend calls `POST /create-user-client` with the same `{ email, username, password }` payload to finalize account creation.
+  </Step>
+</Steps>
+
+## `POST /create-user-client`
+
+**Method:** `POST`  
+**Path:** `/create-user-client`  
+**Authentication:** None
+
+### Headers
+
+| Header | Value |
+|---|---|
+| `Content-Type` | `application/json` |
+| `Accept` | `application/json` |
+
+### Body Parameters
+
+<ParamField body="email" type="string" required>
+  The user's email address. Must be unique across the platform. The service trims whitespace and lowercases the value before submission.
+</ParamField>
+
+<ParamField body="username" type="string" required>
+  The display name for the account. Trimmed of leading/trailing whitespace before submission.
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  The desired account password. Minimum complexity requirements are enforced server-side.
+</ParamField>
+
+### `RegisterPayload` Interface
+
+```typescript
+export interface RegisterPayload {
+  email: string;
+  username: string;
+  password: string;
+}
+```
+
+## Response
+
+<ResponseField name="success" type="boolean">
+  `true` when the account was created successfully.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  A human-readable confirmation or error description, e.g. `"Usuario creado exitosamente"`.
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Optional. May contain the newly created user object depending on the backend configuration.
+</ResponseField>
+
+<ResponseField name="errors" type="object">
+  Optional. Present when validation fails; contains field-level error messages.
+</ResponseField>
+
+### `RegisterResponse` Interface
+
+```typescript
+export interface RegisterResponse {
+  success: boolean;
+  message: string;
+  data?: any;
+  errors?: any;
+}
+```
+
+## Examples
+
+<Tabs>
+  <Tab title="cURL — Send Code">
+    ```bash
+    curl -X POST https://api.metricabienesraices.com/send-code \
+      -H "Content-Type: application/json" \
+      -H "Accept: application/json" \
+      -d '{
+        "email": "nuevo@cliente.com",
+        "username": "NuevoCliente",
+        "password": "ContraseñaSegura123"
+      }'
+    ```
+  </Tab>
+  <Tab title="cURL — Verify Code">
+    ```bash
+    curl -X POST https://api.metricabienesraices.com/api/auth/verify-code \
+      -H "Content-Type: application/json" \
+      -H "Accept: application/json" \
+      -d '{
+        "email": "nuevo@cliente.com",
+        "code": "482910"
+      }'
+    ```
+  </Tab>
+  <Tab title="cURL — Create Account">
+    ```bash
+    curl -X POST https://api.metricabienesraices.com/create-user-client \
+      -H "Content-Type: application/json" \
+      -H "Accept: application/json" \
+      -d '{
+        "email": "nuevo@cliente.com",
+        "username": "NuevoCliente",
+        "password": "ContraseñaSegura123"
+      }'
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    The following mirrors `registerUserClient()` from `create-client-user.service.ts` and `sendVerificationCode()` from `send-code.service.ts`:
+
+    ```typescript
+    import { registerUserClient } from "./create-client-user.service";
+    import { sendVerificationCode } from "./send-code.service";
+    import { verifyCode } from "./verify-code.service";
+
+    // Step 1 — Send the verification code
+    await sendVerificationCode({
+      email: "nuevo@cliente.com",
+      username: "NuevoCliente",
+      password: "ContraseñaSegura123",
+    });
+
+    // Step 2 — Verify the code the user received
+    await verifyCode({
+      email: "nuevo@cliente.com",
+      code: "482910",
+    });
+
+    // Step 3 — Create the account
+    const result = await registerUserClient({
+      email: "nuevo@cliente.com",
+      username: "NuevoCliente",
+      password: "ContraseñaSegura123",
+    });
+
+    if (result.success) {
+      console.log(result.message); // "Usuario creado exitosamente"
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Success Response Example
+
+```json
+{
+  "success": true,
+  "message": "Usuario creado exitosamente",
+  "data": {
+    "id": 45,
+    "email": "nuevo@cliente.com",
+    "username": "NuevoCliente",
+    "role": "client"
+  }
+}
+```
+
+## Error Handling
+
+If the request fails (duplicate email, validation error, etc.), the service throws the full error response object — not just `data.message`. Callers should catch and inspect the thrown value:
+
+```typescript
+try {
+  await registerUserClient(payload);
+} catch (error: any) {
+  // error may be { success: false, message: "...", errors: { email: [...] } }
+  console.error(error.message);
+  if (error.errors) {
+    // Handle field-level validation errors
+  }
+}
+```
+
+<Note>
+  Every account created via `POST /create-user-client` is assigned the **Cliente** role automatically. To provision **agent** or **admin** accounts, use the user management section of the admin dashboard.
+</Note>
+
+## `SendCodeData` and `VerifyCodeData` Interfaces
+
+Used by the pre-registration steps:
+
+```typescript
+export interface SendCodeData {
+  email: string;
+  username: string;
+  password: string;
+}
+
+export interface VerifyCodeData {
+  email: string;
+  code: string;
+}
+```

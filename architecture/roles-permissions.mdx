@@ -1,0 +1,157 @@
+---
+title: "User roles and access control in Metrica Bienes Raices"
+sidebarTitle: "Roles & Permissions"
+description: "Deep-dive into the Administrador, Agente, and Cliente roles, how PrivateRoute enforces access, and the full route matrix for each role in Metrica Bienes Raices."
+---
+
+Metrica Bienes Raices implements role-based access control (RBAC) across every private route in the application. There are three roles — `Administrador`, `Agente`, and `Cliente` — defined as a TypeScript union type and enforced at the React Router level by the `PrivateRoute` component, which reads the authenticated user's role from the Redux `auth` slice. This page explains the role type, the route-protection mechanism, and the complete list of pages available to each role.
+
+## Role type definition
+
+Roles are defined as a strict TypeScript union in `src/types/users/role.types.ts`:
+
+```typescript
+// src/types/users/role.types.ts
+export type UserRole = 'Administrador' | 'Agente' | 'Cliente'
+```
+
+The `role` field on the Redux `AuthState` is typed as `string | null` to accommodate the initial unauthenticated state, but at runtime it will always be one of these three string literals as returned by the backend login endpoint.
+
+## PrivateRoute: how route protection works
+
+Every private route in the app is wrapped in `<PrivateRoute>`. The component reads `isAuthenticated` and `role` from the Redux store and applies two sequential checks:
+
+```tsx
+// src/routes/PrivateRoute.tsx
+export default function PrivateRoute({ children, allowedRoles }: Props) {
+  const { isAuthenticated, role } = useAppSelector((state) => state.auth);
+
+  // Check 1 — must be authenticated at all
+  if (!isAuthenticated) {
+    return <Navigate to="/iniciar-sesion" replace />;
+  }
+
+  // Check 2 — must hold one of the allowed roles (if the route is role-restricted)
+  if (allowedRoles && (!role || !allowedRoles.includes(role))) {
+    return <Navigate to="/panel" replace />;
+  }
+
+  return <>{children}</>;
+}
+```
+
+**Check 1 — Authentication:** If `isAuthenticated` is `false` (no active session), the user is redirected to `/iniciar-sesion` regardless of which route they attempted to access. This covers both unauthenticated visitors and sessions that have expired or been cleared.
+
+**Check 2 — Role authorisation:** If the route declares an `allowedRoles` array and the user's current `role` is not in that array, they are silently redirected to `/panel` (the shared dashboard). This prevents cross-role URL guessing — an `Agente` who navigates directly to `/administrador/usuarios` will be bounced back to the panel without an error page.
+
+<Note>
+  Routes that use `<PrivateRoute>` **without** an `allowedRoles` prop (e.g. the `/panel` route) are accessible to any authenticated user regardless of role.
+</Note>
+
+## Route access matrix
+
+<Tabs>
+  <Tab title="Administrador">
+    The `Administrador` role has the broadest access. All routes under `/administrador/*` are exclusively available to this role, plus the shared `/panel` dashboard.
+
+    | Route | View | Description |
+    |---|---|---|
+    | `/panel` | Dashboard | Shared landing dashboard (all roles) |
+    | `/administrador/usuarios` | UserView | Manage all platform users |
+    | `/administrador/propiedades` | PropiedadesView | Full property catalogue management |
+    | `/administrador/casos/anonimos` | CasosView | View and process anonymous enquiry leads |
+    | `/administrador/casos/crm` | CasesCRMView | Manage registered client CRM requests |
+    | `/administrador/casos/agentes-casos` | LeadAgenteView | Review leads assigned to agents |
+    | `/administrador/transferencia/tranferir-caso` | TransferAgentCase | Transfer anonymous cases to an agent |
+    | `/administrador/reportes` | ReportsView | Analytics charts + PDF/Excel exports |
+    | `/administrador/calendario/calendario-general` | CalendaryGeneralView | Organisation-wide calendar |
+    | `/administrador/calendario/calendario-agentes` | CalendaryAgentslView | Per-agent calendar overview |
+    | `/administrador/configuracion` | SettingsView | Platform-wide settings |
+  </Tab>
+
+  <Tab title="Agente">
+    The `Agente` role has access to their own property listings, assigned clients, a subset of CRM leads, and their personal calendar and profile.
+
+    | Route | View | Description |
+    |---|---|---|
+    | `/panel` | Dashboard | Shared landing dashboard (all roles) |
+    | `/agente/propiedades` | PropiedadesViewAgent | Agent's own property listings |
+    | `/agente/usuarios` | UserAgentView | List of clients assigned to this agent |
+    | `/agente/casos/anonimos` | LeadAnonymousAgent | Anonymous enquiry leads for this agent |
+    | `/agente/casos/crm` | LeadCRMAgente | CRM cases owned by this agent |
+    | `/agente/calendario/calendario-general` | CalendaryGeneralViewAgent | Agent's personal visit calendar |
+    | `/agente/configuracion-perfil` | AgentProfile | Agent profile and account settings |
+  </Tab>
+
+  <Tab title="Cliente">
+    The `Cliente` role is the most restricted. Clients can browse available properties, submit and track their own service requests, and manage their profile.
+
+    | Route | View | Description |
+    |---|---|---|
+    | `/panel` | Dashboard | Shared landing dashboard (all roles) |
+    | `/cliente/propiedad` | AvailablePropertiesClient | Browse available property listings |
+    | `/cliente/solicitudes` | CRMRequestView | Submit and track CRM service requests |
+    | `/cliente/configuracion-perfil` | ClientProfile | Client profile and account settings |
+  </Tab>
+</Tabs>
+
+## How the sidebar reflects roles
+
+The sidebar navigation is not hardcoded per role — it is generated dynamically at runtime. `src/config/navigationConfig.ts` exports a flat `navigationConfig` array where every `NavItem` declares a `roles` array:
+
+```typescript
+// src/config/navigationConfig.ts (excerpt)
+{
+  label: 'Usuarios',
+  path: '/administrador/usuarios',
+  icon: React.createElement(Users),
+  roles: ['Administrador'],           // only visible to Administrador
+},
+{
+  label: 'Mis Propiedades',
+  path: '/agente/propiedades',
+  icon: React.createElement(Home),
+  roles: ['Agente'],                  // only visible to Agente
+},
+{
+  label: 'Dashboard',
+  path: '/panel',
+  icon: React.createElement(List),
+  roles: ['Administrador', 'Agente', 'Cliente'],  // visible to all
+},
+```
+
+`MainLayout` (the private sidebar shell) filters this array by comparing each item's `roles` against the `role` value from `useAppSelector`. This means the UI never exposes navigation links to routes a user cannot access — the route guard and the sidebar stay in sync through the same single source of truth.
+
+<Tip>
+  Some `NavItem` entries use a `children` array to create collapsible sidebar groups (e.g. **Casos** and **Calendario** for the Administrador). The same role-filtering logic applies recursively to nested children.
+</Tip>
+
+## Adding a new role-restricted route
+
+<Steps>
+  <Step title="Create the view component">
+    Add your new page component under the appropriate dashboard folder, e.g. `src/auth/dashboards/admin-dashboard/my-new-view.tsx`.
+  </Step>
+
+  <Step title="Register the route">
+    Import and add a `<Route>` to the relevant module file (`admin.routes.tsx`, `agent.routes.tsx`, or `client.routes.tsx`). The parent `<PrivateRoute allowedRoles={[...]}>` wrapper already covers all child routes.
+
+    ```tsx
+    <Route path="/administrador/mi-nueva-seccion" element={<MyNewView />} />
+    ```
+  </Step>
+
+  <Step title="Add a navigation entry">
+    Add a new `NavItem` to `navigationConfig.ts` with the correct `roles` array so the sidebar link appears for the right users.
+
+    ```typescript
+    {
+      label: 'Mi Nueva Sección',
+      path: '/administrador/mi-nueva-seccion',
+      icon: React.createElement(SomeIcon),
+      roles: ['Administrador'],
+    },
+    ```
+  </Step>
+</Steps>

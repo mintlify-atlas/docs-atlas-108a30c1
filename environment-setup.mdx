@@ -1,0 +1,139 @@
+---
+title: "Configure your environment for Metrica Bienes Raices"
+sidebarTitle: "Environment Setup"
+description: "Set REACT_APP_API_URL and other env vars, understand the CRACO + Tailwind + PostCSS build pipeline, and prepare your local environment correctly."
+---
+
+Metrica Bienes Raices is bootstrapped with Create React App and customised through CRACO (Create React App Configuration Override). This page explains every environment variable the app reads, the CRA convention that governs them, how the Tailwind CSS + PostCSS setup is wired together, and the Webpack polyfills that CRACO injects to support browser-incompatible Node.js modules used by the PDF and Excel export libraries.
+
+## Environment variable conventions
+
+Create React App enforces a strict naming rule: **only variables prefixed with `REACT_APP_` are embedded into the JavaScript bundle** at build time. Any variable that lacks this prefix is completely ignored — it will not appear in `process.env` inside your React code, even if it is defined in your `.env` file.
+
+Variables are read at **build time** via `process.env.REACT_APP_*` and inlined as string literals in the compiled output. Changing a `.env` value requires restarting the dev server (or triggering a new production build) to take effect.
+
+<Tip>
+  Create React App supports `.env`, `.env.local`, `.env.development`, `.env.production`, and `.env.test` files, loaded in priority order. Use `.env.local` for machine-specific overrides that you never want committed to Git.
+</Tip>
+
+## Required environment variables
+
+### `REACT_APP_API_URL`
+
+This is the primary configuration value for the application. Every service file that communicates with the backend constructs its request URLs relative to this base, for example:
+
+```typescript
+// src/services/auth/login.service.ts (illustrative)
+const BASE_URL = process.env.REACT_APP_API_URL;
+
+export const loginRequest = (credentials: LoginCredentials) =>
+  axios.post(`${BASE_URL}/auth/login`, credentials);
+```
+
+Set it to the root of your REST API — include the protocol and, if applicable, a path prefix such as `/api`.
+
+### `REACT_APP_CALENDAR_API_URL` *(optional)*
+
+The calendar feature module reads its own base URL from a dedicated config file (`src/config/calendar-api.config.ts`). If your calendar functionality is served by a separate microservice or a different port, set this variable independently.
+
+## Sample `.env` file
+
+```bash .env
+# ─── Primary API ─────────────────────────────────────────────────────────────
+# Base URL used by all service files (auth, properties, CRM, reports, users)
+REACT_APP_API_URL=http://localhost:8000/api
+
+# ─── Calendar API ─────────────────────────────────────────────────────────────
+# Separate base URL consumed by calendar-api.config.ts
+# Remove or leave empty if your calendar endpoints live under REACT_APP_API_URL
+REACT_APP_CALENDAR_API_URL=http://localhost:8001/api
+```
+
+<Warning>
+  Do not wrap values in quotes inside `.env` files when using Create React App — CRA reads them literally. `REACT_APP_API_URL="http://localhost:8000/api"` would include the quote characters in the runtime value.
+</Warning>
+
+## Tailwind CSS setup
+
+Metrica Bienes Raices uses Tailwind CSS v3 as a utility layer alongside MUI's `sx` prop and `styled-components`. Tailwind is configured in `tailwind.config.js` at the project root:
+
+```js tailwind.config.js
+/** @type {import('tailwindcss').Config} */
+module.exports = {
+  content: [
+    "./src/**/*.{js,jsx,ts,tsx}",
+  ],
+  theme: {
+    extend: {
+      colors: {
+        primary: '#0B2E5B',
+        metricBlue: '#1F3A5F',
+        metricGreen: '#3E6B3A',
+      },
+    },
+  },
+  plugins: [],
+};
+```
+
+Three brand colours are extended into Tailwind's palette so they can be used as utility classes (e.g. `bg-primary`, `text-metricBlue`). Tailwind's content scanner watches every file under `src/` matching `*.{js,jsx,ts,tsx}`, which ensures unused utility classes are purged in production builds.
+
+PostCSS processes Tailwind's directives. The required `postcss.config.js` (or inline CRACO PostCSS config) applies `tailwindcss` and `autoprefixer` as PostCSS plugins — `autoprefixer` is listed as a dev dependency in `package.json`.
+
+## CRACO configuration
+
+CRACO (`@craco/craco`) overrides the Webpack configuration that Create React App generates without ejecting. The `craco.config.js` at the project root makes two categories of change:
+
+### Node.js polyfills
+
+Several dependencies — primarily the PDF and Excel export libraries (`jspdf`, `xlsx`, `@react-pdf/renderer`) — reference Node.js built-in modules (`buffer`, `stream`, `zlib`, `util`, `assert`, `process`) that do not exist in browsers. CRACO adds browser-compatible shims:
+
+```js craco.config.js
+const webpack = require("webpack");
+
+module.exports = {
+  webpack: {
+    configure: (webpackConfig) => {
+      webpackConfig.resolve.fallback = {
+        ...webpackConfig.resolve.fallback,
+        buffer: require.resolve("buffer"),
+        stream: require.resolve("stream-browserify"),
+        zlib: require.resolve("browserify-zlib"),
+        util: require.resolve("util"),
+        assert: require.resolve("assert"),
+        process: require.resolve("process/browser.js"),
+      };
+
+      webpackConfig.resolve.alias = {
+        ...webpackConfig.resolve.alias,
+        process: require.resolve("process/browser.js"),
+      };
+
+      webpackConfig.plugins.push(
+        new webpack.ProvidePlugin({
+          Buffer: ["buffer", "Buffer"],
+          process: require.resolve("process/browser.js"),
+        })
+      );
+
+      return webpackConfig;
+    },
+  },
+};
+```
+
+The `ProvidePlugin` automatically injects `Buffer` and `process` as globals in every module, so third-party code that assumes a Node environment works seamlessly in the browser bundle.
+
+<Note>
+  The polyfill packages (`buffer`, `stream-browserify`, `browserify-zlib`, `util`, `assert`, `process`) are all listed as regular `dependencies` in `package.json`, not `devDependencies`, because they are required at runtime inside the browser bundle.
+</Note>
+
+## Environment checklist
+
+Before running `npm start` or `npm run build`, verify:
+
+- [ ] `.env` file exists in the project root
+- [ ] `REACT_APP_API_URL` points to a reachable backend
+- [ ] `REACT_APP_CALENDAR_API_URL` is set if the calendar service runs on a separate port
+- [ ] `npm install` has been run after any `package.json` changes
+- [ ] The dev server was restarted after any `.env` changes

@@ -1,0 +1,238 @@
+---
+title: "Property Detail View — Metrica Bienes Raices"
+sidebarTitle: "Property Details"
+description: "Full property detail view for clients and admins: image gallery, key metrics, description, nearby places, currency converter, and PDF export."
+---
+
+Metrica Bienes Raices provides a rich property detail view that surfaces every attribute of a listing — from a multi-image gallery with lightbox mode, to a currency converter that re-prices the property in USD, EUR, MXN, or GBP. Clients reach this page at the public route `/propiedad/:id`, while administrators have a parallel view at `/administrador/detalles-propiedad/:id` that adds metadata (publisher, timestamps) and a one-click PDF export.
+
+## Interfaces
+
+### Public detail — PropertyDetailId (client view)
+
+```typescript
+// src/types/properties/property-details.types.ts
+export interface PropertyImage {
+  id: number;
+  property_id: number;
+  image_url: string;   // CDN URL used by the public detail component
+  created_at: string;
+}
+
+export interface PropertyUser {
+  id: number;
+  username: string;
+}
+
+export interface PropertyDetailId {
+  id: number;
+  title: string;
+  description: string;
+  nearby_places: string[];   // list of nearby location names
+  price: string;             // numeric string in COP
+  type: string;              // e.g. "Venta" | "Arriendo"
+  bedrooms: number;
+  bathrooms: number;
+  garages: number;
+  built_area: string;        // m², numeric string
+  land_area: string;         // m², numeric string
+  status: string;
+  address: string;
+  city: string;
+  full_address: string;      // pre-formatted combined address
+  created_by: number;
+  user: PropertyUser;
+  published_at: string;      // ISO 8601 datetime
+  updated_at: string;        // ISO 8601 datetime
+  images: PropertyImage[];
+}
+
+export interface PropertyResponse {
+  success: boolean;
+  property: PropertyDetailId;
+  message?: string;
+}
+```
+
+### Admin detail — PropertyDetailId (admin view)
+
+The admin detail type lives in a separate interface file and uses `url` instead of `image_url` on each image object, and exposes `created_by` as a `PropertyOwner` object (not just an ID).
+
+```typescript
+// src/types/properties/admin-property-id.interface.ts
+export interface PropertyOwner {
+  id: number;
+  username: string;
+}
+
+export interface PropertyImage {
+  id: number;
+  property_id: number;
+  url: string;           // used by the admin detail component
+  created_at: string;
+}
+
+export interface PropertyDetailId {
+  id: number;
+  title: string;
+  description: string;
+  price: string;
+  type: string;
+  bedrooms: number;
+  bathrooms: number;
+  garages: number;
+  built_area: string;
+  land_area: string;
+  status: string;
+  address: string;
+  city: string;
+  full_address: string;
+  created_by: PropertyOwner;  // full object, not just an ID
+  published_at: string;
+  updated_at: string;
+  images: PropertyImage[];
+}
+
+export interface PropertyDetailResponse {
+  success: boolean;
+  message: string;
+  data: PropertyDetailId;
+}
+```
+
+<Note>
+  The two `PropertyDetailId` types share the same field names but differ in the shape of `created_by` (`number` vs `PropertyOwner`) and the image URL key (`image_url` vs `url`). Use the correct import path for each view.
+</Note>
+
+---
+
+## Endpoints
+
+<Tabs>
+  <Tab title="Public (client)">
+    ```
+    GET ${BASE_URL}/propiedad/:id
+    ```
+
+    No authentication required. Returns `PropertyResponse` with the property nested under the `property` key.
+
+    ```typescript
+    // src/services/properties/get-property-by-id.service.ts
+    export async function getPropertyById(id: string): Promise<PropertyResponse> {
+      const response = await fetch(`${BASE_URL}/propiedad/${id}`);
+      const data: PropertyResponse = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Error obteniendo propiedad');
+      return data;
+    }
+    ```
+  </Tab>
+  <Tab title="Admin">
+    ```
+    GET ${BASE_URL}/admin-listar-propiedad/:id
+    Authorization: Bearer <auth_token_mbr>
+    ```
+
+    Requires a valid admin JWT. Returns `PropertyDetailResponse` with the property nested under the `data` key.
+
+    ```typescript
+    // src/services/properties/get-admin-property-by-id.service.ts
+    export const getPropertiesFullDataIdAdmin = async (
+      id: string,
+      token: string
+    ): Promise<PropertyDetailId> => {
+      const response = await fetch(`${BASE_URL}/admin-listar-propiedad/${id}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) throw new Error('Error obteniendo la propiedad');
+
+      const data: PropertyDetailResponse = await response.json();
+      return data.data;
+    };
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## Feature overview
+
+<CardGroup cols={2}>
+  <Card title="Image gallery" icon="images">
+    Full-width hero image with previous/next chevron buttons. A thumbnail strip below shows up to 8 images. Clicking the hero opens a fullscreen lightbox (`showGallery` state).
+  </Card>
+  <Card title="Key metrics" icon="chart-bar">
+    Six stat cards: bedrooms, bathrooms, built area (m²), land area (m²), garages, and a **Lugares Cerca** button that opens the nearby places modal.
+  </Card>
+  <Card title="Currency converter" icon="money-bill">
+    A `<select>` in the price sidebar lets clients convert the COP price to USD, EUR, MXN, or GBP via the `convertFromCOP` service. The converted value updates live on currency change.
+  </Card>
+  <Card title="Information request" icon="envelope">
+    Public visitors can click **Solicitar más información** to open the `CRMAnonymousRequestModal`, which logs an inquiry for the admin team without requiring the visitor to have an account.
+  </Card>
+  <Card title="Nearby places modal" icon="map-pin">
+    The `NearbyPlacesModal` displays the full `nearby_places` string array associated with the property, sourced from the `PropertyDetailId.nearby_places` field.
+  </Card>
+  <Card title="PDF export (admin)" icon="file-pdf">
+    Admins can click **Descargar Información** on the admin detail view. Images are fetched via `fetch`, drawn onto a Canvas, and converted to JPEG base64 before being embedded in a `@react-pdf/renderer` PDF document downloaded as `propiedad-{id}.pdf`.
+  </Card>
+</CardGroup>
+
+---
+
+## Admin-only sidebar fields
+
+The admin detail sidebar shows four additional metadata fields not visible to public users:
+
+| Field | Source | Display |
+|---|---|---|
+| Publicada Por | `property.created_by.username` | Username of the admin who created the listing |
+| Hora y Fecha De Creacion | `property.published_at` | `toLocaleString()` formatted datetime |
+| Hora y Fecha De Ultima Modificacion | `property.updated_at` | `toLocaleString()` formatted datetime |
+| Descargar Información | `handleDownloadPDF()` | Green button; disabled while generating |
+
+---
+
+## PDF export implementation
+
+The admin `handleDownloadPDF` function converts remote image URLs to base64-encoded JPEGs before passing them to the `PropertyPDF` React PDF component, preventing cross-origin issues during PDF rendering.
+
+```typescript
+// Step 1 — Convert each image URL to a JPEG base64 data URI
+async function urlToJpegBase64(url: string, quality = 0.85): Promise<string> {
+  const response = await fetch(url, { mode: 'cors', cache: 'no-store' });
+  const blob = await response.blob();
+  const imageBitmap = await createImageBitmap(blob);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = imageBitmap.width;
+  canvas.height = imageBitmap.height;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#FFFFFF'; // white background for transparent PNGs
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(imageBitmap, 0, 0);
+
+  return new Promise((resolve) =>
+    canvas.toBlob((b) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.readAsDataURL(b!);
+    }, 'image/jpeg', quality)
+  );
+}
+
+// Step 2 — Generate PDF blob and trigger download
+const blob = await pdf(<PropertyPDF property={propertyForPdf} />).toBlob();
+const link = document.createElement('a');
+link.href = URL.createObjectURL(blob);
+link.download = `propiedad-${property.id}.pdf`;
+link.click();
+```
+
+<Warning>
+  The PDF export button is disabled (`disabled={downloadingPDF}`) while the conversion is in progress to prevent double-clicks. Errors during image conversion are caught individually per image — a failed image is silently excluded from the PDF rather than aborting the entire export.
+</Warning>

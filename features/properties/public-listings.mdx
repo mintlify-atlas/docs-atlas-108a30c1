@@ -1,0 +1,182 @@
+---
+title: "Public Property Listings — Metrica Bienes Raices"
+sidebarTitle: "Public Listings"
+description: "Browse all published properties at /propiedades without authentication. Explore the GET /todas-propiedades endpoint, PropertyGetData interface, and filtering."
+---
+
+All published properties in Metrica Bienes Raices are accessible to the public without requiring a login. Visitors can browse the full catalogue at the `/propiedades` route, where each card shows a cover image, address, key metrics (bedrooms, bathrooms, built area, land area), and the asking price in COP. Clicking **Detalles →** on any card routes to `/propiedad/:id` for the full property detail view.
+
+## Endpoint
+
+```
+GET ${BASE_URL}/todas-propiedades
+```
+
+No authentication header is required. The endpoint returns all properties whose status has been set to published/available by an administrator.
+
+**Success response:**
+
+```json
+{
+  "success": true,
+  "message": "Propiedades obtenidas correctamente",
+  "data": [
+    {
+      "id": 1,
+      "title": "Apartamento en El Poblado",
+      "price": "450000000",
+      "type_standar": "Venta",
+      "category": "Espacios Para Vivir",
+      "subcategory": "Apartamentos",
+      "bedrooms": 3,
+      "bathrooms": 2,
+      "garages": 1,
+      "built_area": "120.00",
+      "land_area": "0.00",
+      "full_address": "Calle 10 #43-55, El Poblado, Medellín",
+      "image": "https://cdn.example.com/properties/1/cover.jpg"
+    }
+  ]
+}
+```
+
+## PropertyGetData interface
+
+```typescript
+// src/types/properties/property-data.interface.ts
+export interface PropertyGetData {
+  id: number;
+  title: string;
+  price: string;          // stored as a numeric string, e.g. "450000000"
+  type_standar: string;   // e.g. "Venta" | "Arriendo"
+  category: string;       // top-level category label
+  subcategory: string;    // subcategory within the category
+  bedrooms: number;
+  bathrooms: number;
+  garages: number;
+  built_area: string;     // m², numeric string
+  land_area: string;      // m², numeric string
+  full_address: string;   // formatted address string
+  image: string;          // URL of the cover/primary image
+}
+
+export interface PropertyResponse {
+  success: boolean;
+  message: string;
+  data: PropertyGetData[];
+}
+```
+
+<Note>
+  `price`, `built_area`, and `land_area` are returned as **strings** from the API. The frontend formats them with `Number(value).toLocaleString("es-CO", { maximumFractionDigits: 0 })` before display.
+</Note>
+
+## Fetching listings — TypeScript example
+
+Use the `getProperties` service to fetch the full catalogue in any component:
+
+```typescript
+// src/services/properties/get-properties.service.ts
+import { PropertyResponse } from '../../types/properties/property-data.interface';
+
+const BASE_URL = process.env.REACT_APP_API_URL;
+
+export const getProperties = async (): Promise<PropertyResponse> => {
+  const response = await fetch(`${BASE_URL}/todas-propiedades`);
+
+  const result: PropertyResponse = await response.json();
+
+  if (!response.ok || !result.success) {
+    throw new Error(result.message || 'Error al obtener propiedades');
+  }
+
+  return result;
+};
+```
+
+**Usage in a component:**
+
+```typescript
+import { useEffect, useState } from 'react';
+import { getProperties } from '../services/properties/get-properties.service';
+import { PropertyGetData } from '../types/properties/property-data.interface';
+
+export default function PublicListingsPage() {
+  const [properties, setProperties] = useState<PropertyGetData[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getProperties()
+      .then((res) => setProperties(res.data))
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  // render cards …
+}
+```
+
+## Property card details
+
+Each `PropertyCardPublic` card renders the following fields from `PropertyGetData`:
+
+| Field | Display |
+|---|---|
+| `image` | 224 px cover image (`object-cover`) |
+| `title` | Card heading |
+| `full_address` | Subtitle in gray |
+| `bedrooms` | Bed icon + count |
+| `bathrooms` | Bathtub icon + count |
+| `built_area` | House icon + value in m² |
+| `land_area` | Grass icon + value in m² |
+| `price` | Bold blue, formatted in COP |
+
+Navigating with **Detalles →** links to `/propiedad/${property.id}`.
+
+## Property categories
+
+Properties are organised into a two-level taxonomy using the `propertyCategories` constant. The `category` and `subcategory` fields on each property correspond to these values.
+
+<Tabs>
+  <Tab title="Living Spaces">
+    **Espacios Para Vivir** — Apartamentos, Casas, Penthouse, Townhouse, Condominios, Vivienda Familiar, Duplex, Apartaestudios
+  </Tab>
+  <Tab title="Smart Investment">
+    **Inversión Inteligente** — Renta Corta, Propiedades Turisticas, Preventas, Proyectos de Valorizacion, Oportunidades ROI
+  </Tab>
+  <Tab title="Rural Heritage">
+    **Patrimonio Campestre** — Lotes Campestres, Fincas, Eco-Living, Casas Campestres, Glamping, Parcelaciones, Agroinversiones, Wellness Retreats
+  </Tab>
+  <Tab title="Special Spaces">
+    **Espacios Especiales** — Arquitectura Contemporanea, Minimalismo, Diseño Natural, Espacios Wellness, Luxury Conscious, Propiedades Boutique, Ultra Luxury
+  </Tab>
+  <Tab title="Future Opportunities">
+    **Oportunidades de Futuro** — Preventas, Desarrollos, Proyectos Urbanisticos, Nuevas Etapas, Inversiones Emergentes
+  </Tab>
+  <Tab title="International">
+    **Inversion Internacional** — Compra Remota, Retiro en Colombia, Second Home, Inversion Extranjera, Propiedades Dolarizadas, Turismo Internacional
+  </Tab>
+</Tabs>
+
+There is also a top-level **Explorar Propiedades** category with subcategories: *Todas las Propiedades*, *Propiedades Destacadas*, *Nuevos Ingresos*, *Oportunidades*, *Exclusivas*, *Open House*.
+
+## Filtering and search
+
+The public listings page includes a `FilterBar` component that lets visitors narrow results client-side without additional API calls. The `FilterState` type controls the active filters:
+
+```typescript
+// src/types/properties/property.types.ts
+export interface FilterState {
+  tipo: 'todos' | 'casa' | 'apartamento';
+  estado: 'todos' | 'venta' | 'alquiler';
+  precioMin: string;
+  precioMax: string;
+  habitaciones: string;
+}
+```
+
+`FilterBarProps` also receives `totalResultados` so the bar can display the current count of matching listings in real time.
+
+<Tip>
+  Because all filtering is done on the already-fetched `data` array, switching filter values is instant and requires no additional network requests.
+</Tip>

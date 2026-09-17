@@ -1,0 +1,193 @@
+---
+title: "Leads Overview — Metrica Bienes Raices CRM"
+sidebarTitle: "Leads Overview"
+description: "Understand how Metrica's CRM tracks anonymous and registered leads, lead statuses, service call patterns, and the CreateLeadPayload interface."
+---
+
+Metrica Bienes Raices organises all inbound interest around a unified **lead** concept. A lead ties a prospective buyer or tenant to a specific property, an assigned agent, and an optional registered client account. Two distinct creation paths exist—one for unauthenticated visitors browsing the public portal, and one for clients who are already logged in—but every lead ultimately flows through the same CRM pipeline where agents review, progress, and resolve cases.
+
+## Lead Types
+
+<CardGroup cols={2}>
+  <Card title="Anonymous Leads" icon="user-secret">
+    Created by public visitors who have **not** logged in. The lead is submitted through the public `/crear-lead` endpoint without a Bearer token. Contact details (name, email, phone) are captured in the form payload. Admins and agents see these leads in their respective anonymous case views.
+  </Card>
+  <Card title="Registered (CRM) Leads" icon="user-check">
+    Created by authenticated clients via `POST /client-crear-lead` with a valid `Authorization: Bearer <token>` header. The lead is automatically linked to the client's account and the chosen property and agent. These appear in the CRM Solicitudes views.
+  </Card>
+</CardGroup>
+
+## CreateLeadPayload
+
+Registered leads are submitted with the following payload, defined in `src/types/leads/leads.interface.ts`:
+
+```typescript
+export interface CreateLeadPayload {
+  agent_id:    number;   // ID of the assigned agent
+  property_id: number;   // ID of the property the client is interested in
+  type:        string;   // Lead type / category (e.g. "Compra", "Arriendo")
+  note:        string;   // Free-text note from the client
+}
+```
+
+<ParamField body="agent_id" type="number" required>
+  The `id` of the agent who should receive and manage this lead.
+</ParamField>
+<ParamField body="property_id" type="number" required>
+  The `id` of the property the client is enquiring about.
+</ParamField>
+<ParamField body="type" type="string" required>
+  A categorisation string for the lead (e.g. purchase interest, rental enquiry).
+</ParamField>
+<ParamField body="note" type="string" required>
+  A free-text message or note provided by the client at submission time.
+</ParamField>
+
+### CreateLeadResponse
+
+```typescript
+export interface CreateLeadResponse {
+  success: boolean;
+  message: string;
+  data?:   any;
+  errors?: any;
+}
+```
+
+## Anonymous Lead Creation Payload
+
+Anonymous leads are submitted via `POST /crear-lead` using the `FormDataLead` type (from `src/types/properties/property-lead.type.ts`). Unlike registered leads, **no Bearer token is required** — the endpoint is publicly accessible.
+
+<Note>
+  The anonymous creation service (`createLeadAnonymous`) omits the `Authorization` header entirely, while the registered service (`createLead`) requires `Authorization: Bearer <token>`. Make sure the correct service is called based on the authentication state of the user.
+</Note>
+
+## Lead Statuses
+
+Every lead in the system moves through a defined set of status values tracked in the CRM views:
+
+| Status | Spanish Label | Description |
+|---|---|---|
+| `Nuevo` | Nuevo | Freshly submitted; not yet reviewed |
+| `Visto` | Visto | Opened and viewed by the assigned agent |
+| `En Proceso` | En Proceso | Actively being handled |
+| `Resuelto` | Resuelto | Case closed / resolved |
+
+The `updateStatusAnonymousLead` service handles status transitions via `PATCH /change-status-anonymous-leads-view-details/:id`. Status filters map directly to the `RequestTabType` tabs (`todos`, `nuevos`, `en_proceso`, `resueltos`, `visto`) rendered in the CRM request views.
+
+## Service Call Reference
+
+<Tabs>
+  <Tab title="Create Registered Lead">
+    ```typescript
+    // src/services/leads/create-lead.service.ts
+    export const createLead = async (
+      payload: CreateLeadPayload,
+      token: string
+    ): Promise<CreateLeadResponse> => {
+      const response = await fetch(`${BASE_URL}/client-crear-lead`, {
+        method: "POST",
+        headers: {
+          "Content-Type":  "application/json",
+          Accept:          "application/json",
+          Authorization:   `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+      // ...
+    };
+    ```
+    **Endpoint:** `POST /client-crear-lead`  
+    **Auth:** Bearer token required
+  </Tab>
+  <Tab title="Create Anonymous Lead">
+    ```typescript
+    // src/services/leads/create-lead-anonymous.service.ts
+    export const createLeadAnonymous = async (
+      formData: FormDataLead
+    ): Promise<CreateLeadResponse> => {
+      const response = await fetch(`${BASE_URL}/crear-lead`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept:         "application/json",
+          // No Authorization header
+        },
+        body: JSON.stringify(formData),
+      });
+      // ...
+    };
+    ```
+    **Endpoint:** `POST /crear-lead`  
+    **Auth:** None (public endpoint)
+  </Tab>
+  <Tab title="Get Lead Details">
+    ```typescript
+    // src/services/leads/get-lead-details-by-id.service.ts
+    export const getLeadDetails = async (
+      id: number,
+      token: string
+    ): Promise<LeadDetails> => {
+      const response = await fetch(
+        `${BASE_URL}/mostrar-leads-anonimos/detalles/${id}`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Accept:         "application/json",
+            Authorization:  `Bearer ${token}`,
+          },
+        }
+      );
+      // ...
+    };
+    ```
+    **Endpoint:** `GET /mostrar-leads-anonimos/detalles/:id`  
+    **Auth:** Bearer token required
+  </Tab>
+  <Tab title="Update Lead Status">
+    ```typescript
+    // src/services/leads/patch-update-status-lead.service.ts
+    export const updateStatusAnonymousLead = async (
+      id:     number,
+      status: string,
+      token:  string
+    ) => {
+      const response = await fetch(
+        `${BASE_URL}/change-status-anonymous-leads-view-details/${id}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization:  `Bearer ${token}`,
+          },
+          body: JSON.stringify({ status }),
+        }
+      );
+      // ...
+    };
+    ```
+    **Endpoint:** `PATCH /change-status-anonymous-leads-view-details/:id`  
+    **Auth:** Bearer token required
+  </Tab>
+</Tabs>
+
+## Lead Data Relationships
+
+```
+Lead
+├── agent_id      → Agent user record
+├── property_id   → Property listing
+├── client (opt.) → Authenticated client (registered leads only)
+├── code          → Unique case code (used for search and transfers)
+├── status        → Nuevo | Visto | En Proceso | Resuelto
+└── priority      → Priority level assigned by the system
+```
+
+<Tip>
+  Each lead is assigned a unique `code` string on creation. This code is used across the CRM views for search/filter and is the key identifier when performing an **agent case transfer** (see [Case Transfer](/features/crm/agent-case-transfer)).
+</Tip>
+
+## Pagination
+
+All CRM list views implement client-side pagination with 15 items per page (`itemsPerPage = 15`). The search bar filters by `code` in real-time, and the active tab is automatically switched to the tab containing the searched code.

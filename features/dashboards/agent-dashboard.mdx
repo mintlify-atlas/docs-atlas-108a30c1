@@ -1,0 +1,141 @@
+---
+title: "Agent Dashboard — Assigned Properties, Leads & Calendar"
+sidebarTitle: "Agent Dashboard"
+description: "Overview of the Metrica Agent Dashboard: assigned properties, client management, anonymous and CRM lead queues, calendar, and profile configuration."
+---
+
+The **Agent Dashboard** is the primary workspace for real estate agents using the Metrica Bienes Raices platform. It scopes all data to the authenticated agent—agents see only the properties, clients, and leads that have been assigned to them. The dashboard is accessible at `/panel` (shared entry point) and navigates into the `/agente/*` route namespace.
+
+<Note>
+  The Agent module is currently under active development. Some sections display placeholder data or a development notice via `ServiceAlert.info`. The anonymous leads CRM view and the configuration page are fully functional.
+</Note>
+
+## Navigation Structure
+
+All sidebar entries under the `Agente` role are defined in `navigationConfig` with `roles: ['Agente']`:
+
+| Label | Path | Icon | Description |
+|---|---|---|---|
+| Dashboard | `/panel` | List | Shared summary panel (all roles) |
+| Mis Propiedades | `/agente/propiedades` | Home | Properties assigned to this agent |
+| Usuarios | `/agente/usuarios` | Users | Clients linked to this agent |
+| Solicitudes Anónimas | `/agente/casos/anonimos` | FileText | Anonymous leads queue for this agent |
+| Solicitudes (CRM) | `/agente/casos/crm` | Users | Registered client CRM leads |
+| Calendario | `/agente/calendario/calendario-general` | Calendar | Agent's appointment calendar |
+| Configuración | `/agente/configuracion-perfil` | Settings | Profile settings & update |
+
+The **Casos** entry is a collapsible group containing the two case sub-routes. All other entries are direct links.
+
+## Dashboard Summary Panel
+
+The `AgentDashboard` component (`agent-dashboard.page.tsx`) renders four KPI stat cards:
+
+<CardGroup cols={2}>
+  <Card title="Mis Propiedades" icon="home">
+    Total number of active property listings assigned to this agent, with a monthly delta indicator.
+  </Card>
+  <Card title="Mis Clientes" icon="users">
+    Total client count linked to this agent, with a "new this period" badge.
+  </Card>
+  <Card title="Ventas Este Mes" icon="trending-up">
+    Aggregated sales value for the current month vs. the previous period.
+  </Card>
+  <Card title="Citas Próximas" icon="calendar">
+    Count of upcoming scheduled appointments, with the next appointment's time.
+  </Card>
+</CardGroup>
+
+Below the KPIs, the dashboard renders:
+
+- **Sales Performance chart** — a placeholder `BarChart3` area with week / month / year toggle chips (chart integration pending).
+- **Key Metrics panel** — Tasa de conversión, Propiedades vendidas, and Clientes satisfechos rendered as labelled progress bars alongside a total commission figure.
+- **Active Properties list** — displays each assigned property's title, location, price, status badge (Destacada / Nueva / En oferta), view count, and message count.
+- **Recent Clients list** — shows each client's avatar, name, email, phone, property count, and a star rating.
+- **Upcoming Appointments** — a list of scheduled visits and meetings with client name, property, appointment type, and time.
+
+## Properties View
+
+**Route:** `/agente/propiedades`
+
+Renders assigned properties for this agent. Each property card exposes the same attribute set as the admin properties view (bedrooms, bathrooms, built area, land area, price) but scoped to only the agent's inventory. Agents can navigate to a property detail page for full information.
+
+## Users / Clients View
+
+**Route:** `/agente/usuarios`
+
+Displays the clients that have been assigned to or are associated with this agent. Agents can view contact details and property interests but cannot create or modify user accounts directly.
+
+## Anonymous Cases View
+
+**Route:** `/agente/casos/anonimos`  
+**Component:** `LeadAnonymousAgent` (`lead-anonymous-agent.view.tsx`)
+
+This is the agent-scoped implementation of the anonymous leads CRM. It uses `useCRMRequestsAnonymous` to call `GET /mostrar-leads-agente-anonimos` and returns only leads assigned to the currently authenticated agent.
+
+```typescript
+const {
+  anonymousRequests,
+  loading,
+  error,
+  updateRequestStatus
+} = useCRMRequestsAnonymous();
+```
+
+The view renders `RequestTabs` and `RequestCardAgentLead` components with the same tab structure as the admin anonymous view (Todos / Nuevos / En Proceso / Resueltos / Visto), paginated at 15 items per page.
+
+<Tip>
+  Note that the agent view uses `RequestCardAgentLead` (not the standard `RequestCard`). This agent-specific card component may expose a different action set appropriate to the agent's permissions—for example, an agent cannot transfer a case to another agent, but can advance its status.
+</Tip>
+
+### Search & Filtering
+
+The search bar filters by `code`. On search the view auto-switches to the tab containing the matched case code:
+
+```typescript
+if      (existeEnNuevos)    setActiveTab("nuevos");
+else if (existeEnProceso)   setActiveTab("en_proceso");
+else if (existeEnResueltos) setActiveTab("resueltos");
+else                        setActiveTab("todos");
+```
+
+## CRM Cases View
+
+**Route:** `/agente/casos/crm`  
+**Component:** `LeadCRMAgente` (`lead-crm-agent.view.tsx`)
+
+This section is currently in development. A `ServiceAlert.info` notification is shown to the agent on mount indicating the CRM module is not yet available.
+
+```typescript
+export default function LeadCRMAgente() {
+  useEffect(() => {
+    ServiceAlert.info("Sistema de CRM en desarrollo");
+  }, []);
+  return <h1>Apartado en desarrollo de crm en desarrollo</h1>;
+}
+```
+
+## Calendar
+
+**Route:** `/agente/calendario/calendario-general`
+
+The agent's personal calendar for scheduling and reviewing property visits and client meetings. This route is a direct link (not a group), reflecting that agents have a single unified calendar rather than separate general and agent-specific calendars.
+
+## Profile Configuration
+
+**Route:** `/agente/configuracion-perfil`
+
+Agents can update their own profile information from this settings page. The configuration link has `divider: true` in the navigation config, so it renders with a visual separator above it in the sidebar—marking it as an account-level setting distinct from workspace features.
+
+## Data Scoping
+
+Every service call made from within the Agent Dashboard passes the agent's Bearer token, and the backend filters responses to only include records assigned to that agent:
+
+| Endpoint | Scoping |
+|---|---|
+| `GET /mostrar-leads-agente-anonimos` | Returns only leads where `agent_id` matches the token holder |
+| `GET /mostrar-solicitudes-agente` | Returns only CRM leads assigned to this agent |
+| Properties and users endpoints | Scoped by the backend to the authenticated agent's assignments |
+
+<Warning>
+  Agents do **not** have access to the case transfer feature or the platform-wide statistics dashboard. Attempting to navigate to `/administrador/*` routes while authenticated as an agent will be blocked by the role guard.
+</Warning>
